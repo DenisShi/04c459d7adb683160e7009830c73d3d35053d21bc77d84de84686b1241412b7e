@@ -1,0 +1,46 @@
+root = true
+
+[*]
+indent_style = space
+insert_final_newline = true
+charset = utf-8
+end_of_line = lf
+
+[*.cs]
+indent_size = 4
+
+[*.ts]
+indent_size = 2
+
+[*.html]
+indent_size = 2
+
+[*.scss]
+indent_size = 2
+
+[*.json]
+indent_size = 2
+
+[*.yml]
+indent_size = 2
+
+[*.yaml]
+indent_size = 2
+
+[**/Migrations/*.cs]
+generated_code = true
+
+[*.cs]
+dotnet_diagnostic.CA1000.severity = warning
+dotnet_diagnostic.CA1001.severity = warning
+dotnet_diagnostic.CA1018.severity = warning
+dotnet_diagnostic.CA1050.severity = warning
+dotnet_diagnostic.CA1200.severity = warning
+dotnet_diagnostic.CA1708.severity = warning
+dotnet_diagnostic.CA1711.severity = warning
+dotnet_diagnostic.CA1716.severity = warning
+dotnet_diagnostic.CA1720.severity = warning
+dotnet_diagnostic.CA1724.severity = warning
+dotnet_diagnostic.CA1815.severity = warning
+dotnet_diagnostic.CA1822.severity = warning
+dotnet_diagnostic.CA1836.severity = warning
