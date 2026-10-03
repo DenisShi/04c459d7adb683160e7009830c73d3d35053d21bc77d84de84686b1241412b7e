@@ -1,0 +1,35 @@
+{
+  "contactName": {
+    "valid": [
+      { "input": "  Alice Anderson ", "normalized": "Alice Anderson" },
+      { "input": "A", "normalized": "A" },
+      { "input": "Dr. John-Paul O'Neil", "normalized": "Dr. John-Paul O'Neil" },
+      { "input": "\tBob\t", "normalized": "Bob" }
+    ],
+    "invalid": ["", "   ", "\t\n"]
+  },
+  "number": {
+    "valid": [
+      { "input": "+420 601 234 567", "normalized": "+420601234567" },
+      { "input": "(02) 1234-5678", "normalized": "0212345678" },
+      { "input": "112", "normalized": "112" },
+      { "input": "  601.234.567  ", "normalized": "601234567" },
+      { "input": "+123456789012345", "normalized": "+123456789012345" },
+      { "input": "123456789012345", "normalized": "123456789012345" }
+    ],
+    "invalid": [
+      "",
+      "   ",
+      "12",
+      "+",
+      "+12",
+      "420+601",
+      "++420601234567",
+      "1234567890123456",
+      "+1234567890123456",
+      "601 234 567 ext 2",
+      "abc",
+      "123\n456"
+    ]
+  }
+}

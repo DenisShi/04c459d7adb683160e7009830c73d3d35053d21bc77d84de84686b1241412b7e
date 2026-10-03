@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/PhoneBook.Api/PhoneBook.Api.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/PhoneBook.Api.IntegrationTests/PhoneBook.Api.IntegrationTests.csproj" />
+    <Project Path="tests/PhoneBook.Api.UnitTests/PhoneBook.Api.UnitTests.csproj" />
+  </Folder>
+</Solution>

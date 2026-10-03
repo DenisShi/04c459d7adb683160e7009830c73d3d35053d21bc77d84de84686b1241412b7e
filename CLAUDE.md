@@ -55,8 +55,8 @@ in `frontend/`.
 ### Testing
 
 ```bash
-dotnet test backend/tests/PhoneBook.Api.UnitTests
-dotnet test backend/tests/PhoneBook.Api.IntegrationTests
+cd backend && dotnet test --project tests/PhoneBook.Api.UnitTests
+cd backend && dotnet test --project tests/PhoneBook.Api.IntegrationTests
 npm test
 npm run test:ci
 npm run lint
@@ -108,8 +108,8 @@ Never skip or delete tests unless the behavior they cover was intentionally remo
 All three test levels must pass:
 
 ```bash
-cd backend && dotnet test backend/tests/PhoneBook.Api.UnitTests
-cd backend && dotnet test backend/tests/PhoneBook.Api.IntegrationTests
+cd backend && dotnet test --project tests/PhoneBook.Api.UnitTests
+cd backend && dotnet test --project tests/PhoneBook.Api.IntegrationTests
 cd frontend && npm run lint && npm run test:ci
 cd e2e && npm test
 ```

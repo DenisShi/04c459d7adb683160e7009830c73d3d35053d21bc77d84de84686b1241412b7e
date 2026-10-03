@@ -67,7 +67,7 @@ These versions were verified against the registries on 2026-10-02. Pin exact ver
 | Npgsql EF Core provider | 10.0.3 | `Npgsql.EntityFrameworkCore.PostgreSQL` |
 | Naming conventions | 10.0.1 | `EFCore.NamingConventions` |
 | Testcontainers | 4.15.0 | `Testcontainers.PostgreSql` |
-| xUnit | latest stable v3 | `xunit.v3` |
+| xUnit | 4.0.1 | `xunit.v3`, which runs on Microsoft.Testing.Platform |
 | Angular, Angular CLI, Angular Material | 22.2.x | npm `@angular/*` |
 | TypeScript | 6.0.x | Angular 22 requires `>=6.0 <6.1`; TypeScript 7 is not supported |
 | Vitest | within the `@angular/build` peer range | npm `vitest`, `jsdom` |
@@ -92,6 +92,7 @@ Keycloak 26.8 lists PostgreSQL 18 as a tested database.
 ├── backend/
 │   ├── PhoneBook.slnx
 │   ├── global.json
+│   ├── nuget.config
 │   ├── Directory.Build.props
 │   ├── Directory.Packages.props
 │   ├── .config/dotnet-tools.json
@@ -188,8 +189,8 @@ flowchart LR
 
 | Layer | Contents | Must not reference |
 |---|---|---|
-| `Domain` | `PhoneNumber` entity with a `Create` factory, `Visibility` enum, `PhoneNumberFormat` (normalization and validation rules), `VisibilityRules` (query predicates) | Application, Infrastructure, ASP.NET Core, EF Core |
-| `Application` | `PhoneNumberService`, request and response DTOs, `PhoneNumberScope`, projections, the abstractions `ICurrentUser` and `IPhoneBookDbContext` | Infrastructure, ASP.NET Core (`HttpContext`, MVC types) |
+| `Domain` | `PhoneNumber` entity with a `Create` factory, `Visibility` enum, `PhoneNumberFormat` (normalization and validation rules), `VisibilityRules` (query predicates `VisibleTo`, `PersonalOf` and `SharedWithEveryone`) | Application, Infrastructure, ASP.NET Core, EF Core |
+| `Application` | `PhoneNumberService`, request and response DTOs, `PhoneNumberScope` with its parser, `PhoneNumberQueries.VisibleIn` (applies the base predicate and then narrows it by scope), projections, the abstractions `ICurrentUser` and `IPhoneBookDbContext` | Infrastructure, ASP.NET Core (`HttpContext`, MVC types) |
 | `Infrastructure/Persistence` | `AppDbContext` implementing `IPhoneBookDbContext`, entity configuration, migrations, startup migrator, `DatabaseOptions` | Controllers |
 | `Infrastructure/Auth` | JwtBearer setup, `KeycloakOptions`, `CurrentUser` built on the claims principal | Controllers |
 | `Controllers` | `PhoneNumbersController`, which is thin and delegates to Application | Infrastructure, EF Core |
@@ -664,11 +665,11 @@ Base path: `/api`. Every endpoint except health and OpenAPI requires a valid bea
 | `GET` | `/api/phone-numbers/{id:guid}` | `200` with `PhoneNumberResponse` | `401`, `404` not found or not visible |
 | `POST` | `/api/phone-numbers` | `201` with `Location: /api/phone-numbers/{id}` and `PhoneNumberResponse` | `400` validation, `401`, `415` content type other than `application/json` |
 | `GET` | `/api/openapi/v1.json` | `200` OpenAPI 3.1 document | none (anonymous) |
-| `GET` | `/health/live`, `/health/ready` | `200` (`503` when not ready) | none (anonymous; not proxied by nginx) |
+| `GET` | `/health/live`, `/health/ready`, `/health` | `200` (`503` when not ready; `/health` runs every check, like `/health/ready`) | none (anonymous; not proxied by nginx) |
 
 There is **no PUT, PATCH or DELETE**. Endpoint routing answers these methods on `/api/phone-numbers` and `/api/phone-numbers/{id}` with **405 Method Not Allowed** and an `Allow` header. An anonymous caller gets 401 before that, because authorization runs first.
 
-The `scope` query parameter accepts `all`, `personal` and `shared`, case-insensitively, and defaults to `all`. Any other value, including numeric strings, returns 400.
+The `scope` query parameter accepts `all`, `personal` and `shared`, case-insensitively, and defaults to `all`. Any other value, including numeric strings, returns 400. An empty `scope=` is bound as absent and means `all`.
 
 The list is ordered by `createdAt` descending, then by `id` descending. It returns all entries visible under the scope; see [known limitations](#14-out-of-scope-and-known-limitations) about pagination.
 
@@ -742,12 +743,12 @@ Descriptions come from attributes, never from XML comments: `[EndpointSummary]`,
 ## 9. Migrations and database readiness
 
 1. Migrations live in `Infrastructure/Persistence/Migrations`. They are created with the local tool from `backend/.config/dotnet-tools.json` (`dotnet-ef` 10.0.12): `dotnet ef migrations add <Name> --project src/PhoneBook.Api --output-dir Infrastructure/Persistence/Migrations`.
-2. `Program.cs` builds the app and then, **before** `app.RunAsync()`, calls `DatabaseMigrator.MigrateAsync`. Kestrel is not listening yet, so `/health/ready` cannot succeed before the schema is current.
-3. `DatabaseMigrator` calls `Database.MigrateAsync()` inside a bounded retry loop:
+2. `DatabaseMigrationHostedService` runs the migration in `StartAsync`. `WebApplicationBuilder` registers the web host service last, so every hosted service of the application completes before Kestrel starts listening, and `/health/ready` cannot succeed before the schema is current. Running the migration in `Program.cs` after `Build()` is avoided because `WebApplicationFactory` stops the entry point right after `Build()` and the integration tests would then skip the real migration path.
+3. `DatabaseMigrator` runs `Database.MigrateAsync()` through a bounded retry loop that uses the injected `TimeProvider`:
    - It retries only on transient failures: `NpgsqlException` with `IsTransient`, `PostgresException` with SQL state `57P03` (server is starting up), `SocketException` and `TimeoutException`.
    - The delay grows from 1 second up to 10 seconds.
    - The total time is bounded by `Database:MigrationTimeout`, 90 seconds by default.
-   - Every attempt is logged at Information level and the final failure at Critical level. After the final failure the host stops with exit code 1, and the Compose `restart: on-failure` policy tries again.
+   - Every attempt is logged at Information level and the final failure at Critical level. After the final failure `StartAsync` throws, `Program.cs` returns exit code 1, and the Compose `restart: on-failure` policy tries again.
 4. `Database:ApplyMigrationsOnStartup` defaults to `true`. Integration tests keep it on, so they exercise the real migration path against the Testcontainers database.
 5. EF Core 9 and later take a database-wide migration lock in `MigrateAsync`, so several replicas starting at once do not apply the same migration twice.
 6. Inside Compose, `depends_on: postgres: condition: service_healthy` already orders the startup. The retry loop covers environments without Compose ordering and short database restarts.
@@ -829,6 +830,7 @@ Project: `backend/tests/PhoneBook.Api.IntegrationTests`. Requires a running Dock
 
 - **Database.** `Testcontainers.PostgreSql` starts `postgres:18.6-alpine3.24`, the same tag as Compose, defined once as a constant. There is one container per test collection, shared through a collection fixture. Before each test, `TRUNCATE phone_numbers` resets the data, and tests inside a collection run sequentially, so assertions can expect exact results.
 - **Migrations.** The factory points the connection string at the container. The real startup migration path creates the schema, so every test run also validates the migrations.
+- **Caller identity before JwtBearer exists.** Until the authentication step, `ApiFactory` replaces `ICurrentUser` with `HeaderCurrentUser`, which reads the same `X-Test-Sub` and `X-Test-Username` headers, and replaces `TimeProvider` with a `FakeTimeProvider`.
 - **Test authentication scheme.** `ApiFactory` replaces JwtBearer with a header-driven `TestAuthHandler`. The headers `X-Test-Sub` and `X-Test-Username` define the caller. A request without them gets `AuthenticateResult.NoResult()`, which produces a 401.
 - **Real token validation.** `JwtApiFactory` keeps the real JwtBearer configuration but replaces the OIDC configuration with an in-memory `OpenIdConnectConfiguration` holding a test RSA key, so no metadata is fetched. Tests sign tokens with `JsonWebTokenHandler`. This checks the actual issuer, audience, lifetime and `sub` rules without Keycloak.
 
@@ -907,9 +909,9 @@ Naming: one spec file per journey (`auth.spec.ts`, `add-phone-number.spec.ts`, `
 
 | Level | Command |
 |---|---|
-| Backend unit | `dotnet test backend/tests/PhoneBook.Api.UnitTests` |
-| Backend integration (Docker running) | `dotnet test backend/tests/PhoneBook.Api.IntegrationTests` |
-| Backend, all with coverage | `dotnet test backend/PhoneBook.slnx --collect "XPlat Code Coverage"` |
+| Backend unit | `dotnet test --project tests/PhoneBook.Api.UnitTests` in `backend/` |
+| Backend integration (Docker running) | `dotnet test --project tests/PhoneBook.Api.IntegrationTests` in `backend/` |
+| Backend, all | `dotnet test --solution PhoneBook.slnx` in `backend/` |
 | Frontend unit, watch | `npm test` in `frontend/` (runs `ng test`) |
 | Frontend unit, CI with coverage | `npm run test:ci` in `frontend/` (runs `ng test --watch=false --coverage`) |
 | Frontend lint | `npm run lint` in `frontend/` |
@@ -951,11 +953,11 @@ A failing or skipped test is never "done". Tests are fixed, not deleted or skipp
 
 ### .NET
 
-- `global.json` pins SDK `10.0.401` with `rollForward: latestPatch`.
+- `global.json` requires SDK `10.0.100` with `rollForward: latestFeature`, so the 10.0.401 image used in Docker and any locally installed 10.0.x SDK both satisfy it. It also sets `test.runner` to `Microsoft.Testing.Platform`, which `xunit.v3` and `dotnet test` on .NET 10 require. `nuget.config` clears machine-level sources and maps only nuget.org, which Central Package Management requires.
 - `Directory.Build.props` applies `net10.0`, `Nullable` enabled, `ImplicitUsings` enabled, `TreatWarningsAsErrors`, `EnforceCodeStyleInBuild`, `AnalysisLevel` `latest` with `AnalysisMode` `Recommended`, and `GenerateDocumentationFile` `false`.
 - Central Package Management (`Directory.Packages.props`) holds every package version in one place.
 - Async all the way. Every I/O method is async and accepts a `CancellationToken`, which flows from the action parameter. There is no `.Result` or `.Wait()`.
-- Dependency injection uses constructor injection and primary constructors. Each layer registers itself through one extension method: `AddApplication`, `AddPersistence`, `AddKeycloakAuthentication`. `DbContext` is scoped. `TimeProvider.System` is registered as a singleton and replaced in tests.
+- Dependency injection uses constructor injection and primary constructors. Each layer registers itself through one extension method: `AddApplication`, `AddPersistence`, `AddCurrentUser` (the Keycloak JwtBearer registration `AddKeycloakAuthentication` joins it in the Auth layer) and `AddApi`. `DbContext` is scoped. `TimeProvider.System` is registered as a singleton and replaced in tests.
 - Configuration uses the options pattern: `KeycloakOptions` (section `Keycloak`) and `DatabaseOptions` (section `Database`) are bound with `ValidateDataAnnotations().ValidateOnStart()`, so a missing setting fails at startup. The connection string is `ConnectionStrings:PhoneBook`. In containers, every value comes from environment variables such as `Keycloak__ValidIssuer`.
 - Controllers are `[ApiController]` classes with attribute routing. They contain no business logic, return `ActionResult<T>` and declare `[ProducesResponseType]` for every status code.
 - EF Core: Fluent API configuration in `IEntityTypeConfiguration<T>` classes, `AsNoTracking()` and projection to DTOs for reads, snake_case names, explicit lengths and check constraints.

@@ -44,3 +44,6 @@ dotnet_diagnostic.CA1724.severity = warning
 dotnet_diagnostic.CA1815.severity = warning
 dotnet_diagnostic.CA1822.severity = warning
 dotnet_diagnostic.CA1836.severity = warning
+
+[backend/tests/**/*.cs]
+dotnet_diagnostic.CA1707.severity = none
