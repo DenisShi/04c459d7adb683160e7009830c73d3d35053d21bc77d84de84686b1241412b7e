@@ -13,7 +13,7 @@ public sealed class CreatePhoneNumberRequest
 
     [Required]
     [PhoneNumberValue]
-    [Description("Phone number. Spaces, dashes, dots and parentheses are removed; the result is an optional leading plus and 3 to 15 digits.")]
+    [Description("Phone number in international format: a leading plus, the country calling code and the national number, for example +420 601 234 567. Spaces, dashes, dots and parentheses are allowed. The number must be valid for its country and is stored in E.164 form.")]
     public string? Number { get; init; }
 
     [Required]
@@ -37,7 +37,7 @@ public sealed class ContactNameAttribute : ValidationAttribute
 public sealed class PhoneNumberValueAttribute : ValidationAttribute
 {
     public PhoneNumberValueAttribute()
-        : base("Enter a valid phone number: optional leading +, then 3 to 15 digits.")
+        : base("Enter a valid phone number in international format, for example +420 601 234 567.")
     {
     }
 

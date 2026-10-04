@@ -1,9 +1,10 @@
 import { AbstractControl, ValidationErrors, ValidatorFn } from '@angular/forms';
+import { parsePhoneNumberFromString } from 'libphonenumber-js/max';
 
 export const CONTACT_NAME_MAX_LENGTH = 100;
 export const PHONE_NUMBER_MAX_INPUT_LENGTH = 32;
 
-const NORMALIZED_PHONE_NUMBER = /^\+?[0-9]{3,15}$/;
+const INTERNATIONAL_NUMBER = /^\+[0-9]{1,17}$/;
 const PHONE_NUMBER_SEPARATORS = /[ \-.()]/g;
 const SERVER_WHITESPACE =
   '\\t-\\r \\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000';
@@ -13,8 +14,13 @@ export function trimLikeServer(input: string): string {
   return input.replace(SURROUNDING_WHITESPACE, '');
 }
 
-export function normalizePhoneNumber(input: string): string {
-  return trimLikeServer(input).replace(PHONE_NUMBER_SEPARATORS, '');
+export function normalizePhoneNumber(input: string): string | null {
+  const candidate = trimLikeServer(input).replace(PHONE_NUMBER_SEPARATORS, '');
+  if (!INTERNATIONAL_NUMBER.test(candidate)) {
+    return null;
+  }
+  const parsed = parsePhoneNumberFromString(candidate);
+  return parsed?.isValid() ? parsed.number : null;
 }
 
 export const contactNameValidator: ValidatorFn = (
@@ -42,7 +48,7 @@ export const phoneNumberValidator: ValidatorFn = (
       maxlength: { requiredLength: PHONE_NUMBER_MAX_INPUT_LENGTH, actualLength: value.length },
     };
   }
-  if (!NORMALIZED_PHONE_NUMBER.test(normalizePhoneNumber(value))) {
+  if (normalizePhoneNumber(value) === null) {
     return { phoneNumber: true };
   }
   return null;

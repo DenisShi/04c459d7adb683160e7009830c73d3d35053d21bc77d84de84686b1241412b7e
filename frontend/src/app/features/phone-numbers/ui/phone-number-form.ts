@@ -59,7 +59,8 @@ import {
           <mat-error>Phone number must be at most {{ numberMaxLength }} characters.</mat-error>
         } @else if (form.controls.number.hasError('phoneNumber')) {
           <mat-error
-            >Enter a valid phone number: optional leading +, then 3 to 15 digits.</mat-error
+            >Enter a valid phone number in international format, for example +420 601 234
+            567.</mat-error
           >
         } @else if (form.controls.number.hasError('server')) {
           <mat-error>{{ form.controls.number.getError('server') }}</mat-error>

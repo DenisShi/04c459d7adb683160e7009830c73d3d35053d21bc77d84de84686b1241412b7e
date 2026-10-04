@@ -118,7 +118,11 @@ describe('PhoneNumbersStore', () => {
   it('flags a general failure for other errors', async () => {
     await flushList('all', []);
 
-    const created = store.create({ contactName: 'A', number: '112', visibility: 'PERSONAL' });
+    const created = store.create({
+      contactName: 'A',
+      number: '+420601234567',
+      visibility: 'PERSONAL',
+    });
     httpTesting.expectOne({ method: 'POST', url: PHONE_NUMBERS_URL }).flush({}, serverError);
 
     await expect(created).resolves.toBe(false);

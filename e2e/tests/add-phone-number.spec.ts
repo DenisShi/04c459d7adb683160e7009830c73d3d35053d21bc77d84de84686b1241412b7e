@@ -17,7 +17,7 @@ test('alice adds a personal and a shared phone number', async ({ page }) => {
   });
   await phoneNumbersPage.add({
     contactName: sharedName,
-    number: '(02) 1234-5678',
+    number: '+49 (30) 1234-5678',
     visibility: 'Shared',
   });
 
@@ -28,6 +28,6 @@ test('alice adds a personal and a shared phone number', async ({ page }) => {
     phoneNumbersPage.row(personalName).getByRole('cell', { name: '+420601234567', exact: true }),
   ).toBeVisible();
   await expect(
-    phoneNumbersPage.row(sharedName).getByRole('cell', { name: '0212345678', exact: true }),
+    phoneNumbersPage.row(sharedName).getByRole('cell', { name: '+493012345678', exact: true }),
   ).toBeVisible();
 });

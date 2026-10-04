@@ -162,18 +162,20 @@ public sealed class PhoneNumbersValidationTests(ApiFixture fixture) : ApiTestBas
     }
 
     [Theory]
-    [InlineData("12", false)]
-    [InlineData("+12", false)]
-    [InlineData("123", true)]
-    [InlineData("+123", true)]
-    [InlineData("+123456789012345", true)]
-    [InlineData("+1234567890123456", false)]
+    [InlineData("+420601234567", true)]
+    [InlineData("+16502530000", true)]
+    [InlineData("601234567", false)]
+    [InlineData("112", false)]
+    [InlineData("+42060123456", false)]
+    [InlineData("+4206012345678", false)]
+    [InlineData("+999123456789", false)]
+    [InlineData("+123456789012345", false)]
     [InlineData("+", false)]
-    [InlineData("++123", false)]
-    [InlineData("123+", false)]
-    [InlineData("12 3 ext", false)]
-    [InlineData("\u0661\u0662\u0663\u0664\u0665", false)]
-    public async Task Post_NumberDigitCountAndShape_IsEnforced(string number, bool accepted)
+    [InlineData("++420601234567", false)]
+    [InlineData("420601234567+", false)]
+    [InlineData("+420 601 234 567 ext", false)]
+    [InlineData("+\u0664\u0662\u0660\u0666\u0660\u0661\u0662\u0663\u0664\u0665\u0666\u0667", false)]
+    public async Task Post_NumberMustBeAValidInternationalNumber(string number, bool accepted)
     {
         using var alice = Fixture.CreateClient(Alice, "alice");
         var body = $$"""{"contactName":"Alice","number":"{{number}}","visibility":"SHARED"}""";
@@ -191,7 +193,7 @@ public sealed class PhoneNumbersValidationTests(ApiFixture fixture) : ApiTestBas
     public async Task Post_NumberRawLength_IsEnforcedBeforeNormalization(int rawLength, HttpStatusCode expected)
     {
         using var alice = Fixture.CreateClient(Alice, "alice");
-        var number = "+12" + new string('-', rawLength - 4) + "3";
+        var number = "+420" + new string('-', rawLength - 13) + "601234567";
         var body = $$"""{"contactName":"Alice","number":"{{number}}","visibility":"SHARED"}""";
 
         var response = await alice.PostAsync(PhoneNumbersUrl, JsonBody(body), Cancellation);
@@ -203,13 +205,13 @@ public sealed class PhoneNumbersValidationTests(ApiFixture fixture) : ApiTestBas
     public async Task Post_NumberWithSeparatorsAndSurroundingWhitespace_IsStoredNormalized()
     {
         using var alice = Fixture.CreateClient(Alice, "alice");
-        var body = """{"contactName":"Alice","number":"  (02) 1234-5678.  ","visibility":"PERSONAL"}""";
+        var body = """{"contactName":"Alice","number":"  +49 (30) 1234-5678.  ","visibility":"PERSONAL"}""";
 
         var response = await alice.PostAsync(PhoneNumbersUrl, JsonBody(body), Cancellation);
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var created = await response.Content.ReadFromJsonAsync<PhoneNumberResponse>(Json, Cancellation);
-        Assert.Equal("0212345678", created!.Number);
+        Assert.Equal("+493012345678", created!.Number);
     }
 
     [Fact]

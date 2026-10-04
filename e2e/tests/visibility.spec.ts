@@ -12,8 +12,16 @@ test('bob sees alice shared number and does not see alice personal number', asyn
 
   const alicePage = new PhoneNumbersPage(page);
   await alicePage.goto();
-  await alicePage.add({ contactName: personalName, number: '601 234 567', visibility: 'Personal' });
-  await alicePage.add({ contactName: sharedName, number: '601 234 568', visibility: 'Shared' });
+  await alicePage.add({
+    contactName: personalName,
+    number: '+420 601 234 567',
+    visibility: 'Personal',
+  });
+  await alicePage.add({
+    contactName: sharedName,
+    number: '+420 601 234 568',
+    visibility: 'Shared',
+  });
 
   const bobContext = await browser.newContext({ storageState: bob.storageStatePath });
   try {

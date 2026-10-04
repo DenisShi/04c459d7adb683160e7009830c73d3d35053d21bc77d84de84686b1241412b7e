@@ -76,29 +76,31 @@ public class PhoneNumberFormatTests
     [InlineData(33, false)]
     public void TryNormalizeNumber_RawLengthBoundary_IsEnforced(int rawLength, bool expected)
     {
-        var number = "+12" + new string('-', rawLength - 4) + "3";
+        var number = "+420" + new string(' ', rawLength - 13) + "601234567";
 
         Assert.Equal(rawLength, number.Length);
         Assert.Equal(expected, PhoneNumberFormat.TryNormalizeNumber(number, out _));
     }
 
     [Theory]
-    [InlineData(15, true)]
-    [InlineData(16, false)]
-    public void TryNormalizeNumber_DigitCountBoundary_IsEnforced(int digits, bool expected)
+    [InlineData("+420 60123456", false)]
+    [InlineData("+420 601234567", true)]
+    [InlineData("+420 6012345678", false)]
+    public void TryNormalizeNumber_DigitCount_FollowsTheCountryNumberingPlan(string number, bool expected)
     {
-        var number = "+" + new string('7', digits);
-
         Assert.Equal(expected, PhoneNumberFormat.TryNormalizeNumber(number, out _));
     }
 
-    [Theory]
-    [InlineData(3, true)]
-    [InlineData(2, false)]
-    public void TryNormalizeNumber_MinimumDigitCount_IsEnforced(int digits, bool expected)
+    [Fact]
+    public void TryNormalizeNumber_NationalNumberWithoutCountryCode_ReturnsFalse()
     {
-        var number = new string('7', digits);
+        Assert.False(PhoneNumberFormat.TryNormalizeNumber("601 234 567", out _));
+    }
 
-        Assert.Equal(expected, PhoneNumberFormat.TryNormalizeNumber(number, out _));
+    [Fact]
+    public void TryNormalizeNumber_TrunkPrefixAfterCountryCode_IsDroppedFromCanonicalForm()
+    {
+        Assert.True(PhoneNumberFormat.TryNormalizeNumber("+44 (0) 20 7946 0958", out var normalized));
+        Assert.Equal("+442079460958", normalized);
     }
 }

@@ -8,7 +8,7 @@ test('the page offers no edit or delete controls', async ({ page }) => {
   const phoneNumbersPage = new PhoneNumbersPage(page);
   const contactName = uniqueContactName('ReadOnly');
   await phoneNumbersPage.goto();
-  await phoneNumbersPage.add({ contactName, number: '601 234 569', visibility: 'Shared' });
+  await phoneNumbersPage.add({ contactName, number: '+420 601 234 569', visibility: 'Shared' });
 
   for (const role of ['button', 'link', 'menuitem', 'checkbox'] as const) {
     await expect(page.getByRole(role, { name: mutationAffordance })).toHaveCount(0);

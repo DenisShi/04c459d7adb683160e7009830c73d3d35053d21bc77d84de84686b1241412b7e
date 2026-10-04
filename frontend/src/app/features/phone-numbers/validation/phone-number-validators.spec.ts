@@ -32,15 +32,30 @@ describe('phoneNumberValidator', () => {
   });
 
   it('accepts 32 characters and rejects 33 after trimming', () => {
-    const digits = (spaces: number) => `1`.repeat(8) + ' '.repeat(spaces) + '1'.repeat(7);
-    expect(phoneNumberValidator(new FormControl(` ${digits(17)} `))).toBeNull();
-    expect(phoneNumberValidator(new FormControl(digits(18)))).toHaveProperty('maxlength');
+    const padded = (spaces: number) => '+420' + ' '.repeat(spaces) + '601234567';
+    expect(phoneNumberValidator(new FormControl(` ${padded(19)} `))).toBeNull();
+    expect(phoneNumberValidator(new FormControl(padded(20)))).toHaveProperty('maxlength');
+  });
+
+  it.each(['+420 60123456', '+420 6012345678'])(
+    'rejects %j because its length does not fit the country numbering plan',
+    (input) => {
+      expect(phoneNumberValidator(new FormControl(input))).toEqual({ phoneNumber: true });
+    },
+  );
+
+  it('rejects a national number without the country code', () => {
+    expect(phoneNumberValidator(new FormControl('601 234 567'))).toEqual({ phoneNumber: true });
   });
 });
 
 describe('normalizePhoneNumber', () => {
   it.each(cases.number.valid)('normalizes "$input" to "$normalized"', ({ input, normalized }) => {
     expect(normalizePhoneNumber(input)).toBe(normalized);
+  });
+
+  it.each(cases.number.invalid)('returns null for %j', (input) => {
+    expect(normalizePhoneNumber(input)).toBeNull();
   });
 });
 

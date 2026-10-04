@@ -9,8 +9,16 @@ test('filter shows only the entries of the selected scope', async ({ page }) => 
   const phoneNumbersPage = new PhoneNumbersPage(page);
   await phoneNumbersPage.goto();
   await expect(phoneNumbersPage.scopeFilter('All')).toBeChecked();
-  await phoneNumbersPage.add({ contactName: personalName, number: '112', visibility: 'Personal' });
-  await phoneNumbersPage.add({ contactName: sharedName, number: '113', visibility: 'Shared' });
+  await phoneNumbersPage.add({
+    contactName: personalName,
+    number: '+420 601 234 571',
+    visibility: 'Personal',
+  });
+  await phoneNumbersPage.add({
+    contactName: sharedName,
+    number: '+420 601 234 572',
+    visibility: 'Shared',
+  });
 
   await phoneNumbersPage.filterBy('Personal');
   await phoneNumbersPage.expectEntry(personalName, 'Personal');

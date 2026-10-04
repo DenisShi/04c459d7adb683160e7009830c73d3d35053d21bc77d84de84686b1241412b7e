@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Text.RegularExpressions;
+using PhoneNumbers;
 
 namespace PhoneBook.Api.Domain;
 
@@ -8,6 +9,8 @@ public static partial class PhoneNumberFormat
 {
     public const int MaxContactNameLength = 100;
     public const int MaxRawNumberLength = 32;
+
+    private static readonly PhoneNumberUtil NumberingPlan = PhoneNumberUtil.GetInstance();
 
     public static bool TryNormalizeContactName(string? input, [NotNullWhen(true)] out string? normalized)
     {
@@ -41,17 +44,32 @@ public static partial class PhoneNumberFormat
         }
 
         var candidate = builder.ToString();
-        if (!CanonicalNumber().IsMatch(candidate))
+        if (!InternationalNumber().IsMatch(candidate))
         {
             return false;
         }
 
-        normalized = candidate;
+        PhoneNumbers.PhoneNumber parsed;
+        try
+        {
+            parsed = NumberingPlan.Parse(candidate, null);
+        }
+        catch (NumberParseException)
+        {
+            return false;
+        }
+
+        if (!NumberingPlan.IsValidNumber(parsed))
+        {
+            return false;
+        }
+
+        normalized = NumberingPlan.Format(parsed, PhoneNumbers.PhoneNumberFormat.E164);
         return true;
     }
 
     private static bool IsSeparator(char character) => character is ' ' or '-' or '.' or '(' or ')';
 
-    [GeneratedRegex(@"^\+?[0-9]{3,15}\z")]
-    private static partial Regex CanonicalNumber();
+    [GeneratedRegex(@"^\+[0-9]{1,17}\z")]
+    private static partial Regex InternationalNumber();
 }

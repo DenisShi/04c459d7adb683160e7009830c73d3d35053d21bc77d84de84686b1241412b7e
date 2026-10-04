@@ -40,10 +40,23 @@ test.describe('add form validation', () => {
     await phoneNumbersPage.expectNoEntry(contactName);
   });
 
+  for (const number of ['601 234 567', '+420 101 234 567', '+420 601 234 5678']) {
+    test(`number ${number} that is not a real international number is rejected`, async ({
+      page,
+    }) => {
+      const { addForm } = new PhoneNumbersPage(page);
+
+      await addForm.add({ contactName: uniqueContactName('Unreal'), number, visibility: 'Shared' });
+
+      await expect(addForm.numberInvalidError).toBeVisible();
+      expect(createRequests).toEqual([]);
+    });
+  }
+
   test('blank contact name shows a required error', async ({ page }) => {
     const { addForm } = new PhoneNumbersPage(page);
 
-    await addForm.add({ contactName: '   ', number: '601 234 567', visibility: 'Personal' });
+    await addForm.add({ contactName: '   ', number: '+420 601 234 567', visibility: 'Personal' });
 
     await expect(addForm.contactNameRequiredError).toBeVisible();
     expect(createRequests).toEqual([]);

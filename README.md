@@ -250,7 +250,7 @@ Response:
 Validation rules:
 
 - `contactName` is required and is trimmed. The trimmed value must be 1 to 100 characters.
-- `number` is required. Spaces, `-`, `.`, `(` and `)` are removed. The result must be an optional leading `+` followed by 3 to 15 digits, and it is stored in that normalized form.
+- `number` is required and must be in international format: a leading `+` and the country calling code, for example `+420 601 234 567`. Spaces, `-`, `.`, `(` and `)` are allowed. The number must be valid for its country (known country code, correct length, assigned range), which is checked with libphonenumber on both the backend and the frontend. It is stored in E.164 form, for example `+420601234567`.
 - `visibility` is required and must be `PERSONAL` or `SHARED`.
 
 Errors are returned as `application/problem+json` (RFC 9457). Validation errors list the failing fields by their JSON names under `errors`. Owner fields in a request body are ignored.

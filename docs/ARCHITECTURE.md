@@ -603,10 +603,12 @@ Backend and frontend apply identical rules. The backend enforces them authoritat
 | Field | Rule |
 |---|---|
 | `contactName` | Required. Leading and trailing whitespace is trimmed. The trimmed value must be 1 to 100 characters. Whitespace-only input is invalid. |
-| `number` | Required. Leading and trailing whitespace is trimmed, and the trimmed input must be at most 32 characters. Normalization removes spaces, `-`, `.`, `(` and `)`. The normalized value must match `^\+?[0-9]{3,15}$`: an optional leading `+`, then 3 to 15 digits (15 is the E.164 maximum). The normalized value is what gets stored and returned. |
+| `number` | Required. Leading and trailing whitespace is trimmed, and the trimmed input must be at most 32 characters. Normalization removes spaces, `-`, `.`, `(` and `)`. The result must be in international format: a leading `+`, then digits only. The number is parsed with libphonenumber (`libphonenumber-csharp` on the backend, `libphonenumber-js` with full metadata on the frontend) and must be a valid number for its country: known country calling code, a length allowed by that country and a range that is assigned. The E.164 form of the parsed number is what gets stored and returned. |
 | `visibility` | Required, with no server-side default. Must be `PERSONAL` or `SHARED`; the JSON enum converter matches the name case-insensitively, ignores surrounding spaces and responses always use the upper-case form. |
 
-Examples: `+420 601 234 567` is stored as `+420601234567`. `(02) 1234-5678` is stored as `0212345678`. `112` is valid. These inputs are invalid: `12` (too short), `+` (no digits), `420+601` (`+` not at the start), `++420601234567`, `1234567890123456` (16 digits) and `601 234 567 ext 2` (letters).
+Examples: `+420 601 234 567` is stored as `+420601234567`. `+49 (30) 1234-5678` is stored as `+493012345678`. `+44 (0) 20 7946 0958` is stored as `+442079460958`, because the trunk prefix `0` is not part of the international number. These inputs are invalid: `601 234 567` and `(02) 1234-5678` (no country calling code), `00420601234567` (the `00` prefix instead of `+`), `112` (a short code, not a subscriber number), `+420 123` and `+420 601 234 5678` (wrong length for the Czech Republic), `+420 101 234 567` (an unassigned range), `+999 123 456 789` (unknown country calling code) and `+420 601 234 567 ext 2` (letters).
+
+The database CHECK constraint `ck_phone_numbers_number_format` checks only the shape of the stored value. Numbering plans change over time, so validity for a country is checked when an entry is created and is not enforced again by the database.
 
 `contracts/phone-number-validation-cases.json` is the single source of test vectors. Both the xUnit and the Vitest suites read it, so a rule change that touches only one side fails a test. Its shape is:
 
@@ -618,7 +620,7 @@ Examples: `+420 601 234 567` is stored as `+420601234567`. `(02) 1234-5678` is s
   },
   "number": {
     "valid": [{ "input": "+420 601 234 567", "normalized": "+420601234567" }],
-    "invalid": ["12", "+", "420+601"]
+    "invalid": ["601 234 567", "+420 123", "+999 123 456 789"]
   }
 }
 ```
@@ -728,7 +730,7 @@ Validation errors use `ValidationProblemDetails`. Their `errors` keys are the JS
   "title": "One or more validation errors occurred.",
   "status": 400,
   "errors": {
-    "number": ["Enter a valid phone number: optional leading +, then 3 to 15 digits."],
+    "number": ["Enter a valid phone number in international format, for example +420 601 234 567."],
     "visibility": ["The visibility field is required."]
   },
   "traceId": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
