@@ -11,3 +11,11 @@ export interface PhoneNumber {
   readonly isOwnedByCurrentUser: boolean;
   readonly createdAt: string;
 }
+
+export interface CreatePhoneNumberRequest {
+  readonly contactName: string;
+  readonly number: string;
+  readonly visibility: Visibility;
+}
+
+export type FieldErrors = Readonly<Partial<Record<keyof CreatePhoneNumberRequest, string>>>;
