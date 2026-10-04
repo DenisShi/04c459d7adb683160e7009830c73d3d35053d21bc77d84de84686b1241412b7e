@@ -158,7 +158,6 @@ Keycloak 26.8 lists PostgreSQL 18 as a tested database.
 ├── docker-compose.yml
 ├── docker-compose.dev.yml
 ├── README.md
-├── CLAUDE.md
 ├── .editorconfig
 ├── .gitattributes
 └── .gitignore
@@ -966,7 +965,6 @@ A failing or skipped test is never "done". Tests are fixed, not deleted or skipp
 - **English only.** UI text, identifiers, documentation, configuration, log messages, Keycloak display names and commit messages are in English. Review enforces this; an automated check is not part of the pipeline yet.
 - **No comments in source or configuration files.** That means no `//`, `/* */`, `///` XML documentation, `<!-- -->`, `#` comment lines in YAML, Dockerfile, nginx, shell, `.editorconfig` or `.gitignore`, and no TODO markers. A shebang line is not a comment. Code explains itself through names and structure. OpenAPI text comes from attributes.
 - **Scaffold comments are removed.** Templates leave comments behind and must be cleaned: `dotnet new` (for example in `Program.cs`), `ng new` (`tsconfig.json`, `styles.scss`, `.editorconfig`, `.gitignore`) and EF Core migrations.
-- **Naming restriction.** One specific company name must never appear in any tracked file. CLAUDE.md describes the rule; the check is performed locally outside the repository.
 - **Commits.** Conventional Commits in English, for example `feat(api): add phone number creation endpoint`. Commits are small and the build is green at every commit.
 - **`.gitattributes`.** `* text=auto eol=lf`. Shell scripts, JSON and YAML always use LF.
 - **`.editorconfig`.** The root file sets UTF-8, LF, final newline, 4-space indentation for C#, and 2 spaces for TypeScript, HTML, SCSS, JSON and YAML. `backend/.editorconfig` holds the .NET analyzer settings: `generated_code = true` for `**/Migrations/*.cs`, the analyzer severities and the test-only relaxations. It lives inside the backend build context and the Dockerfile copies it, so the container build applies the same analyzer rules as a local build. Analyzer severities are tuned there, never with suppression comments.
