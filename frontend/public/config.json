@@ -1,0 +1,7 @@
+{
+  "keycloak": {
+    "url": "http://localhost:8080",
+    "realm": "phonebook",
+    "clientId": "phonebook-spa"
+  }
+}
