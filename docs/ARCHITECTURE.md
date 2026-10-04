@@ -87,7 +87,6 @@ Keycloak 26.8 lists PostgreSQL 18 as a tested database.
 .
 ├── .github/
 │   └── workflows/
-│       ├── ci.yml
 │       └── publish.yml
 ├── backend/
 │   ├── PhoneBook.slnx
@@ -152,6 +151,7 @@ Keycloak 26.8 lists PostgreSQL 18 as a tested database.
 │   ├── playwright.config.ts
 │   ├── setup/
 │   ├── pages/
+│   ├── support/
 │   └── tests/
 ├── docs/
 │   └── ARCHITECTURE.md
@@ -173,9 +173,7 @@ Keycloak 26.8 lists PostgreSQL 18 as a tested database.
 | `contracts/` | Cross-stack test fixtures; the validation cases are consumed by both backend and frontend unit tests, which keeps both sides' validation identical |
 | `e2e/` | Playwright end-to-end suite with its own `package.json` |
 | `docs/` | Architecture documentation |
-| `.github/workflows/` | CI and image publishing |
-
-The original task brief lives in a local `_task/` folder, which is git-ignored and never committed.
+| `.github/workflows/` | Test pipeline and image publishing |
 
 ### Backend layering
 
@@ -223,8 +221,8 @@ The project name is set with the top-level key `name: phonebook`. This keeps con
 |---|---|---|---|---|---|
 | `postgres` | `postgres:18.6-alpine3.24` | `data` | none | none | `pg_isready` over TCP |
 | `keycloak` | `quay.io/keycloak/keycloak:26.8.0` | `data` | `${KEYCLOAK_PORT:-8080}:8080` | postgres (`service_healthy`) | HTTP probe on management port 9000 |
-| `backend` | `${DOCKERHUB_NAMESPACE:-denisshi}/phonebook-backend:${PHONEBOOK_TAG:-latest}` plus `build: ./backend` | `data`, `web` | none | postgres, keycloak (`service_healthy`) | image `HEALTHCHECK` on `/health/ready` |
-| `frontend` | `${DOCKERHUB_NAMESPACE:-denisshi}/phonebook-frontend:${PHONEBOOK_TAG:-latest}` plus `build: ./frontend` | `web` | `${APP_PORT:-4200}:8080` | backend (`service_healthy`) | image `HEALTHCHECK` on `/healthz` |
+| `backend` | `${IMAGE_NAMESPACE:-ghcr.io/denisshi}/phonebook-backend:${PHONEBOOK_TAG:-latest}` plus `build: ./backend` | `data`, `web` | none | postgres, keycloak (`service_healthy`) | Compose probe of `/health` (overrides the image `HEALTHCHECK`) |
+| `frontend` | `${IMAGE_NAMESPACE:-ghcr.io/denisshi}/phonebook-frontend:${PHONEBOOK_TAG:-latest}` plus `build: ./frontend` | `web` | `${APP_PORT:-4200}:8080` | backend (`service_healthy`) | image `HEALTHCHECK` on `/healthz` |
 
 Startup order: postgres, then keycloak, then backend, then frontend. Each service waits until the previous one reports healthy. When the frontend is reachable, everything behind it is ready.
 
@@ -258,7 +256,7 @@ Every variable has an inline default (`${VAR:-default}`), so a clean clone needs
 |---|---|---|
 | `APP_PORT` | `4200` | frontend host port; Keycloak redirect URIs via `APP_PUBLIC_URL` |
 | `KEYCLOAK_PORT` | `8080` | Keycloak host port and public URL; backend `ValidIssuer`; frontend `KEYCLOAK_URL` |
-| `DOCKERHUB_NAMESPACE` | `denisshi` | backend and frontend image names |
+| `IMAGE_NAMESPACE` | `ghcr.io/denisshi` | backend and frontend image names |
 | `PHONEBOOK_TAG` | `latest` | backend and frontend image tags |
 | `POSTGRES_PASSWORD` | `postgres` | PostgreSQL superuser |
 | `KEYCLOAK_DB_PASSWORD` | `keycloak` | role `keycloak` |
@@ -286,7 +284,7 @@ Keycloak and the backend keep no local state, so stopping and starting the stack
 |---|---|---|
 | postgres | `pg_isready -h 127.0.0.1 -p 5432 -U postgres -d postgres` | 5s / 5s / 20 / 10s |
 | keycloak | `bash -c` probe of `http://127.0.0.1:9000/health/ready`; healthy only on HTTP 200 | 10s / 5s / 30 / 30s |
-| backend | Dockerfile `HEALTHCHECK`: `wget -q -O /dev/null http://127.0.0.1:8080/health/ready` | 10s / 3s / 6 / 60s |
+| backend | Compose: `wget --quiet --tries=1 --spider http://localhost:8080/health`. The image also declares a `HEALTHCHECK` on `/health/ready` (10s / 3s / 6 / 60s) that applies when the image runs without Compose | 10s / 5s / 30 / 15s |
 | frontend | Dockerfile `HEALTHCHECK`: `wget -q -O /dev/null http://127.0.0.1:8080/healthz` | 10s / 3s / 3 / 5s |
 
 Pitfalls these checks are designed around:
@@ -772,22 +770,24 @@ The production alternative to migrating at startup is an EF migration bundle run
 
 ## 10. Container images and tags
 
-| Image | Docker Hub repository | Platforms |
+| Image | GitHub Container Registry package | Platforms |
 |---|---|---|
-| Backend | `denisshi/phonebook-backend` | `linux/amd64`, `linux/arm64` |
-| Frontend | `denisshi/phonebook-frontend` | `linux/amd64`, `linux/arm64` |
+| Backend | `ghcr.io/denisshi/phonebook-backend` | `linux/amd64`, `linux/arm64` |
+| Frontend | `ghcr.io/denisshi/phonebook-frontend` | `linux/amd64`, `linux/arm64` |
+
+The GitHub Container Registry was chosen over Docker Hub because the workflow authenticates with the built-in `GITHUB_TOKEN`: there are no long-lived registry credentials to create, store or rotate. A package published from a workflow with `GITHUB_TOKEN` is linked to the repository and inherits its visibility, so the images are public and can be pulled anonymously.
 
 PostgreSQL and Keycloak use the official images. Their configuration comes from bind-mounted repository files (`db/init`, `keycloak/realm`), so no custom images are published for them.
 
 ### Compose: published images and source builds
 
-Each application service declares both `image: ${DOCKERHUB_NAMESPACE:-denisshi}/phonebook-<name>:${PHONEBOOK_TAG:-latest}` and `build: ./<name>`. According to the Compose specification, when `pull_policy` is not set, Compose first tries to pull the image and builds from source only when the image is not found. As a result:
+Each application service declares both `image: ${IMAGE_NAMESPACE:-ghcr.io/denisshi}/phonebook-<name>:${PHONEBOOK_TAG:-latest}` and `build: ./<name>`. According to the Compose specification, when `pull_policy` is not set, Compose first tries to pull the image and builds from source only when the image is not found. As a result:
 
 - `docker-compose up` in a clean clone runs the published images.
 - `docker-compose up --build` builds both images from source.
 - `docker compose pull` refreshes a `latest` image that was pulled earlier.
 
-If the repository does not exist on Docker Hub yet, the pull fails with `pull access denied` and Compose builds the image from source instead, tagging it with the same `image:` name. Later runs of `docker-compose up` reuse that local image, so after changing source code use `docker-compose up --build`.
+If the image has not been published yet, the pull fails and Compose builds the image from source instead, tagging it with the same `image:` name. Later runs of `docker-compose up` reuse that local image, so after changing source code use `docker-compose up --build`.
 
 `PHONEBOOK_TAG=1.0.0 docker-compose up` pins a specific release.
 
@@ -797,18 +797,19 @@ The tags are computed by `docker/metadata-action`:
 
 | Trigger | Tags |
 |---|---|
-| Git tag `vX.Y.Z` | `X.Y.Z`, `X.Y`, `latest` (only for releases without a pre-release suffix), `sha-<short>` |
-| Manual `workflow_dispatch` | `sha-<short>` |
+| Git tag `vX.Y.Z` | `X.Y.Z`, `X.Y`, `X`, `latest` |
+| Manual `workflow_dispatch` on a branch | `latest` |
 
-The images carry OCI labels: source repository, revision, creation time and version.
+The images carry the standard OCI labels generated by `docker/metadata-action`.
 
 ### Publishing pipeline
 
-- `publish.yml` runs on pushed tags `v*.*.*` and on `workflow_dispatch`.
-- Its first job calls `ci.yml` as a reusable workflow (`workflow_call`). The publish job declares `needs` on it, so images are published only when every test level is green.
-- The publish job is a matrix over `backend` and `frontend`. It runs `docker/setup-qemu-action`, `docker/setup-buildx-action`, `docker/login-action` with the secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`, `docker/metadata-action`, and `docker/build-push-action` with `platforms: linux/amd64,linux/arm64` and the GitHub Actions build cache.
+- `ci.yml` runs on every branch push and pull request and can also be called as a reusable workflow (`workflow_call`). It has three jobs: `backend` (unit and integration tests), `frontend` (lint, unit tests, production build) and `e2e` (the full Compose stack plus Playwright).
+- `publish.yml` runs on pushed tags `v*.*.*` and on `workflow_dispatch`. Its first job calls `ci.yml`; the `publish` job declares `needs: [ci]`, so images are published only when every test suite is green.
+- The `publish` job is a matrix over `backend` and `frontend`. It runs `docker/setup-qemu-action`, `docker/setup-buildx-action`, `docker/login-action` against `ghcr.io` with `GITHUB_TOKEN`, `docker/metadata-action`, and `docker/build-push-action` with `platforms: linux/amd64,linux/arm64` and the GitHub Actions build cache.
+- The image namespace is the lowercased repository owner, because registry names must be lowercase.
 - Both Dockerfiles run their build stages with `FROM --platform=$BUILDPLATFORM`. The backend publishes with `dotnet publish -a $TARGETARCH`, and the Angular output does not depend on the architecture. Final stages only copy files, so compilation never runs under QEMU emulation.
-- Workflow permissions are `contents: read`.
+- Workflow permissions default to `contents: read`. Only the `publish` job adds `packages: write`.
 
 ## 11. Testing strategy
 
@@ -938,14 +939,15 @@ Naming: one spec file per journey (`auth.spec.ts`, `add-phone-number.spec.ts`, `
 
 ### Continuous integration
 
-`.github/workflows/ci.yml` runs on pushes to `main`, on pull requests and through `workflow_call`.
+The job `ci` in `.github/workflows/publish.yml` runs on pushes to `main`, on pull requests, on version tags and on manual runs.
 
-| Job | Steps |
+| Step | Command |
 |---|---|
-| `hygiene` | Fails if any tracked file contains non-Latin characters |
-| `backend` | `actions/setup-dotnet` with `global-json-file`; restore; `dotnet build -c Release` (warnings are errors); `dotnet test` with TRX logger and coverage; upload results. Testcontainers uses the runner's Docker engine |
-| `frontend` | `actions/setup-node` 24 with npm cache; `npm ci`; `npm run lint`; `npm run test:ci`; `npm run build` |
-| `e2e` | Needs `backend` and `frontend`. `docker compose up -d --build --wait --wait-timeout 300`, so CI tests the commit's own images; `npm ci`; `npx playwright install --with-deps chromium`; `npx playwright test`. On failure it uploads `playwright-report`, `test-results` and `docker compose logs`. Always ends with `docker compose down -v` |
+| Backend unit tests | `dotnet test --project tests/PhoneBook.Api.UnitTests` in `backend/`, with the SDK selected by `global.json` |
+| Backend integration tests | `dotnet test --project tests/PhoneBook.Api.IntegrationTests` in `backend/`; Testcontainers uses the runner's Docker engine |
+| Frontend | `npm ci`, `npm run lint`, `npm run test:ci`, `npm run build` in `frontend/` |
+
+The end-to-end suite and the English-only check are not part of the pipeline yet. Run the e2e suite locally against the Compose stack (see Commands above) before merging changes that touch the running stack. Adding an `e2e` job that starts the stack with `docker compose up -d --build --wait` and runs Playwright is the planned extension.
 
 ### Definition of Done
 
@@ -961,10 +963,10 @@ A failing or skipped test is never "done". Tests are fixed, not deleted or skipp
 
 ### Repository-wide
 
-- **English only.** UI text, identifiers, documentation, configuration, log messages, Keycloak display names and commit messages are in English. CI enforces this.
+- **English only.** UI text, identifiers, documentation, configuration, log messages, Keycloak display names and commit messages are in English. Review enforces this; an automated check is not part of the pipeline yet.
 - **No comments in source or configuration files.** That means no `//`, `/* */`, `///` XML documentation, `<!-- -->`, `#` comment lines in YAML, Dockerfile, nginx, shell, `.editorconfig` or `.gitignore`, and no TODO markers. A shebang line is not a comment. Code explains itself through names and structure. OpenAPI text comes from attributes.
 - **Scaffold comments are removed.** Templates leave comments behind and must be cleaned: `dotnet new` (for example in `Program.cs`), `ng new` (`tsconfig.json`, `styles.scss`, `.editorconfig`, `.gitignore`) and EF Core migrations.
-- **Naming restriction.** The original brief forbids one specific name from appearing in code, documentation or names. It is never written in any tracked file. CLAUDE.md describes how to check this.
+- **Naming restriction.** One specific company name must never appear in any tracked file. CLAUDE.md describes the rule; the check is performed locally outside the repository.
 - **Commits.** Conventional Commits in English, for example `feat(api): add phone number creation endpoint`. Commits are small and the build is green at every commit.
 - **`.gitattributes`.** `* text=auto eol=lf`. Shell scripts, JSON and YAML always use LF.
 - **`.editorconfig`.** The root file sets UTF-8, LF, final newline, 4-space indentation for C#, and 2 spaces for TypeScript, HTML, SCSS, JSON and YAML. `backend/.editorconfig` holds the .NET analyzer settings: `generated_code = true` for `**/Migrations/*.cs`, the analyzer severities and the test-only relaxations. It lives inside the backend build context and the Dockerfile copies it, so the container build applies the same analyzer rules as a local build. Analyzer severities are tuned there, never with suppression comments.
@@ -1035,7 +1037,7 @@ Stop `ng serve` and the host backend before switching to the full Docker stack. 
 | Credentials | Demo users and passwords committed as Compose defaults | Secrets from a secret store; no default passwords |
 | Hostname | `localhost` only; ports are configurable | A public hostname variable feeding the same three settings |
 | Pagination and search | The list returns every visible entry | Keyset pagination on `(created_at, id)` and server-side search |
-| Editing and deleting | Not possible by design | Not planned; the brief forbids it |
+| Editing and deleting | Not possible by design | Not planned; entries are append-only by design |
 | Brute-force protection | Disabled in the demo realm | Enabled with temporary lockout |
 | Content Security Policy | Only `frame-ancestors 'self'` | Full CSP with hashes (Angular `autoCsp`), plus `connect-src` and `frame-src` for the Keycloak origin |
 | Database roles | The application role owns its database and runs migrations | Separate migration and runtime roles; migrations as a pre-deployment job |

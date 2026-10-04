@@ -65,7 +65,7 @@ services:
       start_period: 30s
 
   backend:
-    image: ${DOCKERHUB_NAMESPACE:-denisshi}/phonebook-backend:${PHONEBOOK_TAG:-latest}
+    image: ${IMAGE_NAMESPACE:-ghcr.io/denisshi}/phonebook-backend:${PHONEBOOK_TAG:-latest}
     build: ./backend
     restart: on-failure
     environment:
@@ -90,7 +90,7 @@ services:
       start_period: 15s
 
   frontend:
-    image: ${DOCKERHUB_NAMESPACE:-denisshi}/phonebook-frontend:${PHONEBOOK_TAG:-latest}
+    image: ${IMAGE_NAMESPACE:-ghcr.io/denisshi}/phonebook-frontend:${PHONEBOOK_TAG:-latest}
     build: ./frontend
     environment:
       KEYCLOAK_URL: http://localhost:${KEYCLOAK_PORT:-8080}
