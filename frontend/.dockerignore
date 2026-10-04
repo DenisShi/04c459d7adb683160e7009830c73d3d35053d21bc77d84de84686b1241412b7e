@@ -1,9 +1,14 @@
-node_modules/
+**/node_modules/
 dist/
 .angular/
+coverage/
+test-results/
 .vscode/
+.idea/
 .git/
 .gitignore
+.dockerignore
+Dockerfile
 README.md
 .env
-.env.local
+.env.*

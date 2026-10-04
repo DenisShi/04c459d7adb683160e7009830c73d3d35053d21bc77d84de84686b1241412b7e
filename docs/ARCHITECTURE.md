@@ -96,6 +96,7 @@ Keycloak 26.8 lists PostgreSQL 18 as a tested database.
 │   ├── Directory.Build.props
 │   ├── Directory.Packages.props
 │   ├── .config/dotnet-tools.json
+│   ├── .editorconfig
 │   ├── Dockerfile
 │   ├── .dockerignore
 │   ├── src/
@@ -120,7 +121,8 @@ Keycloak 26.8 lists PostgreSQL 18 as a tested database.
 │   ├── Dockerfile
 │   ├── .dockerignore
 │   ├── nginx/
-│   │   └── default.conf.template
+│   │   ├── default.conf.template
+│   │   └── security-headers.conf
 │   ├── public/
 │   │   ├── config.json
 │   │   └── silent-check-sso.html
@@ -225,6 +227,15 @@ The project name is set with the top-level key `name: phonebook`. This keeps con
 | `frontend` | `${DOCKERHUB_NAMESPACE:-denisshi}/phonebook-frontend:${PHONEBOOK_TAG:-latest}` plus `build: ./frontend` | `web` | `${APP_PORT:-4200}:8080` | backend (`service_healthy`) | image `HEALTHCHECK` on `/healthz` |
 
 Startup order: postgres, then keycloak, then backend, then frontend. Each service waits until the previous one reports healthy. When the frontend is reachable, everything behind it is ready.
+
+The backend receives all of its configuration through environment variables:
+
+| Variable | Compose value |
+|---|---|
+| `ConnectionStrings__PhoneBook` | `Host=postgres;Port=5432;Database=phonebook;Username=phonebook;Password=${APP_DB_PASSWORD:-phonebook};GSS Encryption Mode=Disable` |
+| `Keycloak__MetadataAddress`, `Keycloak__ValidIssuer`, `Keycloak__Audience`, `Keycloak__RequireHttpsMetadata` | See [Issuer and hostname](#4-issuer-and-hostname) |
+
+`GSS Encryption Mode=Disable` stops Npgsql from attempting GSSAPI encryption, which it prefers by default. The PostgreSQL container offers no Kerberos, and the Alpine runtime image has no `libgssapi_krb5`, so the attempt would only print a library loading error on every new connection.
 
 The backend has `restart: on-failure`. If the database is unreachable for longer than the migration timeout, the process exits with a non-zero code and Docker restarts it. The other services use the default restart policy, so the stack never auto-starts on a reviewer's machine after a reboot.
 
@@ -449,7 +460,7 @@ A single variable, `KEYCLOAK_PORT`, drives the public Keycloak URL used by Keycl
 The frontend image has two stages:
 
 1. **Build stage.** `FROM --platform=$BUILDPLATFORM node:24.21.0-alpine3.24`. It runs `npm ci` and `npm run build`. The JavaScript output does not depend on the CPU architecture, so it is built once on the native platform.
-2. **Runtime stage.** `nginxinc/nginx-unprivileged:1.30.5-alpine3.24`. nginx runs as uid 101 and listens on port 8080. The stage copies the browser build output into `/usr/share/nginx/html` and `nginx/default.conf.template` into `/etc/nginx/templates/`.
+2. **Runtime stage.** `nginxinc/nginx-unprivileged:1.30.5-alpine3.24`. nginx runs as uid 101 and listens on port 8080. The stage copies the browser build output into `/usr/share/nginx/html`, `nginx/default.conf.template` into `/etc/nginx/templates/` and `nginx/security-headers.conf` into `/etc/nginx/snippets/`.
 
 At container start, the stock nginx entrypoint runs `envsubst` on `/etc/nginx/templates/*.template` and writes the results into `/etc/nginx/conf.d/`. It substitutes only variables that are defined in the environment, so nginx runtime variables such as `$uri` stay untouched. The Dockerfile declares defaults for every template variable, so the image also runs on its own:
 
@@ -471,7 +482,7 @@ The nginx server block contains:
 | `= /config.json` | `return 200` with a JSON body built from `KEYCLOAK_URL`, `KEYCLOAK_REALM` and `KEYCLOAK_CLIENT_ID`; `default_type application/json`; `Cache-Control: no-store` |
 | `= /healthz` | `return 200`, `access_log off` |
 
-Server-wide settings are `server_tokens off`, gzip for text types, and the headers `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin` and `Content-Security-Policy: frame-ancestors 'self'`. The frame policy allows the SPA to frame its own `silent-check-sso.html`, which a blanket `X-Frame-Options: DENY` would block. nginx does not inherit `add_header` into a location that declares its own `add_header`, so the security headers live in one included snippet that every such location includes. A full script and style CSP is a production hardening item, see [known limitations](#14-out-of-scope-and-known-limitations).
+Server-wide settings are `server_tokens off`, gzip for text types, and the headers `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin` and `Content-Security-Policy: frame-ancestors 'self'`. The frame policy allows the SPA to frame its own `silent-check-sso.html`, which a blanket `X-Frame-Options: DENY` would block. nginx does not inherit `add_header` into a location that declares its own `add_header`, so the security headers live in one snippet, `nginx/security-headers.conf`, that every such location includes. A full script and style CSP is a production hardening item, see [known limitations](#14-out-of-scope-and-known-limitations).
 
 Because nginx serves the SPA and proxies `/api` on the same origin, the browser never makes a cross-origin API call. The backend needs no CORS configuration. The only cross-origin calls go from the SPA to Keycloak, and Keycloak allows them through `webOrigins: ["+"]`.
 
@@ -776,6 +787,8 @@ Each application service declares both `image: ${DOCKERHUB_NAMESPACE:-denisshi}/
 - `docker-compose up --build` builds both images from source.
 - `docker compose pull` refreshes a `latest` image that was pulled earlier.
 
+If the repository does not exist on Docker Hub yet, the pull fails with `pull access denied` and Compose builds the image from source instead, tagging it with the same `image:` name. Later runs of `docker-compose up` reuse that local image, so after changing source code use `docker-compose up --build`.
+
 `PHONEBOOK_TAG=1.0.0 docker-compose up` pins a specific release.
 
 ### Tag strategy
@@ -953,7 +966,7 @@ A failing or skipped test is never "done". Tests are fixed, not deleted or skipp
 - **Naming restriction.** The original brief forbids one specific name from appearing in code, documentation or names. It is never written in any tracked file. CLAUDE.md describes how to check this.
 - **Commits.** Conventional Commits in English, for example `feat(api): add phone number creation endpoint`. Commits are small and the build is green at every commit.
 - **`.gitattributes`.** `* text=auto eol=lf`. Shell scripts, JSON and YAML always use LF.
-- **`.editorconfig`.** UTF-8, LF, final newline, 4-space indentation for C#, 2 spaces for TypeScript, HTML, SCSS, JSON and YAML. `generated_code = true` for `**/Migrations/*.cs`. Analyzer severities are tuned here, never with suppression comments.
+- **`.editorconfig`.** The root file sets UTF-8, LF, final newline, 4-space indentation for C#, and 2 spaces for TypeScript, HTML, SCSS, JSON and YAML. `backend/.editorconfig` holds the .NET analyzer settings: `generated_code = true` for `**/Migrations/*.cs`, the analyzer severities and the test-only relaxations. It lives inside the backend build context and the Dockerfile copies it, so the container build applies the same analyzer rules as a local build. Analyzer severities are tuned there, never with suppression comments.
 
 ### .NET
 
@@ -985,8 +998,8 @@ A failing or skipped test is never "done". Tests are fixed, not deleted or skipp
 - Multi-stage builds. Build stages run on `$BUILDPLATFORM`; final stages contain only runtime artifacts.
 - Base images are pinned to exact versions, as listed in [Versions](#versions).
 - Containers run as non-root users: the backend as `USER $APP_UID`, the built-in `app` user of the .NET images; the frontend as uid 101 from nginx-unprivileged. Both listen on port 8080.
-- Layer caching: the backend copies `*.csproj`, `Directory.*.props` and `global.json` and restores before copying sources; the frontend copies `package.json` and `package-lock.json` and runs `npm ci` before copying sources.
-- Each build context has a `.dockerignore` excluding `bin`, `obj`, `node_modules`, `dist`, `.angular`, test results and IDE folders.
+- Layer caching: the backend copies `*.csproj`, `Directory.*.props`, `global.json`, `nuget.config` and `.editorconfig` and restores before copying sources; the frontend copies `package.json` and `package-lock.json` and runs `npm ci` before copying sources.
+- Each build context has a `.dockerignore` excluding `bin`, `obj`, `node_modules`, `dist`, `.angular`, test results and IDE folders. Patterns for nested folders use `**/` (for example `**/bin/`), because a plain `bin/` matches only the context root and would let host build output into the image.
 - `HEALTHCHECK` is defined in the application Dockerfiles; Compose defines health checks for the third-party images.
 - No secrets in images or build arguments. All configuration is provided at runtime through environment variables.
 - Compose: `depends_on` with `condition: service_healthy`, inline variable defaults, a named data volume and read-only bind mounts for configuration.
@@ -1003,6 +1016,8 @@ A failing or skipped test is never "done". Tests are fixed, not deleted or skipp
 | Run the frontend dev server (`http://localhost:4200`; proxies `/api` to `http://localhost:5080` through `proxy.conf.json`) | `npm start` in `frontend/` |
 
 `appsettings.Development.json` points the backend at `localhost:5432` and at Keycloak on `http://localhost:8080`, for both `MetadataAddress` and `ValidIssuer`, with `RequireHttpsMetadata` set to `false`. When the backend runs on the host, the discovery document is fetched from `localhost:8080` and backchannel URLs resolve to `localhost`, so no extra configuration is needed.
+
+Stop `ng serve` and the host backend before switching to the full Docker stack. `ng serve` listens on `[::1]:4200` and the host backend on `localhost:5080`, while Docker publishes its ports on all addresses. Browsers try `::1` first for `localhost`, so a dev server left running silently shadows the Docker frontend on the same port. Alternatively, run the stack on another port, for example `APP_PORT=4300` after `docker compose down -v`.
 
 | URL | Service |
 |---|---|

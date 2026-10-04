@@ -64,6 +64,41 @@ services:
       retries: 30
       start_period: 30s
 
+  backend:
+    image: ${DOCKERHUB_NAMESPACE:-denisshi}/phonebook-backend:${PHONEBOOK_TAG:-latest}
+    build: ./backend
+    restart: on-failure
+    environment:
+      ConnectionStrings__PhoneBook: Host=postgres;Port=5432;Database=phonebook;Username=phonebook;Password=${APP_DB_PASSWORD:-phonebook};GSS Encryption Mode=Disable
+      Keycloak__MetadataAddress: http://keycloak:8080/realms/phonebook/.well-known/openid-configuration
+      Keycloak__ValidIssuer: http://localhost:${KEYCLOAK_PORT:-8080}/realms/phonebook
+      Keycloak__Audience: phonebook-api
+      Keycloak__RequireHttpsMetadata: "false"
+    networks:
+      - data
+      - web
+    depends_on:
+      postgres:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+
+  frontend:
+    image: ${DOCKERHUB_NAMESPACE:-denisshi}/phonebook-frontend:${PHONEBOOK_TAG:-latest}
+    build: ./frontend
+    environment:
+      KEYCLOAK_URL: http://localhost:${KEYCLOAK_PORT:-8080}
+      KEYCLOAK_REALM: phonebook
+      KEYCLOAK_CLIENT_ID: phonebook-spa
+      API_UPSTREAM: http://backend:8080
+    ports:
+      - "${APP_PORT:-4200}:8080"
+    networks:
+      - web
+    depends_on:
+      backend:
+        condition: service_healthy
+
 networks:
   data:
   web:
