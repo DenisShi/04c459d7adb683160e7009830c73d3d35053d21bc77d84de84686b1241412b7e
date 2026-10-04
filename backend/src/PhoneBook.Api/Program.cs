@@ -9,12 +9,16 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddApplication();
 builder.Services.AddPersistence(builder.Configuration);
 builder.Services.AddCurrentUser();
+builder.Services.AddKeycloakAuthentication(builder.Configuration);
 builder.Services.AddApi();
 
 var app = builder.Build();
 
 app.UseExceptionHandler();
 app.UseStatusCodePages();
+
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.MapControllers();
 app.MapOpenApi("/api/openapi/{documentName}.json").AllowAnonymous();

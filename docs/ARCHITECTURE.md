@@ -192,7 +192,7 @@ flowchart LR
 | `Domain` | `PhoneNumber` entity with a `Create` factory, `Visibility` enum, `PhoneNumberFormat` (normalization and validation rules), `VisibilityRules` (query predicates `VisibleTo`, `PersonalOf` and `SharedWithEveryone`) | Application, Infrastructure, ASP.NET Core, EF Core |
 | `Application` | `PhoneNumberService`, request and response DTOs, `PhoneNumberScope` with its parser, `PhoneNumberQueries.VisibleIn` (applies the base predicate and then narrows it by scope), projections, the abstractions `ICurrentUser` and `IPhoneBookDbContext` | Infrastructure, ASP.NET Core (`HttpContext`, MVC types) |
 | `Infrastructure/Persistence` | `AppDbContext` implementing `IPhoneBookDbContext`, entity configuration, migrations, startup migrator, `DatabaseOptions` | Controllers |
-| `Infrastructure/Auth` | JwtBearer setup, `KeycloakOptions`, `CurrentUser` built on the claims principal | Controllers |
+| `Infrastructure/Auth` | JwtBearer setup (`AddKeycloakAuthentication`, `ConfigureJwtBearerOptions`), `KeycloakOptions`, `CurrentUser` built on the claims principal | Controllers |
 | `Controllers` | `PhoneNumbersController`, which is thin and delegates to Application | Infrastructure, EF Core |
 | `Program.cs` | Composition root that calls one `Add...` extension method per layer | none |
 
@@ -406,7 +406,8 @@ How it works:
 1. `KC_HOSTNAME` fixes Keycloak's frontend URL. The issuer and all browser-facing endpoints, such as the authorization endpoint and the login pages, are always `http://localhost:8080/...`, regardless of how Keycloak was reached.
 2. With `KC_HOSTNAME_BACKCHANNEL_DYNAMIC=true`, backchannel endpoints in the discovery document (`token_endpoint`, `jwks_uri`, `userinfo_endpoint`, `introspection_endpoint`) are derived from the incoming request. When the backend fetches discovery from `http://keycloak:8080`, the document contains `issuer = http://localhost:8080/realms/phonebook` and `jwks_uri = http://keycloak:8080/realms/phonebook/protocol/openid-connect/certs`. The backend can download the signing keys, and the issuer matches the tokens.
 3. The backend sets `MetadataAddress`, not `Authority`, to the internal URL, and sets `ValidIssuer` explicitly to the external issuer. Making the expected issuer explicit configuration catches drift immediately instead of trusting whatever discovery returns.
-4. JwtBearer downloads the discovery document and JWKS once, caches them, and validates each token locally: signature, lifetime, issuer and audience. Keycloak is not called on each request.
+4. Only `RS256` signatures are accepted (`ValidAlgorithms`), which is the Keycloak realm default. Unsigned and HMAC-signed tokens are rejected even if their claims are correct.
+5. JwtBearer downloads the discovery document and JWKS once, caches them, and validates each token locally: signature, lifetime, issuer and audience. Keycloak is not called on each request.
 
 ```mermaid
 sequenceDiagram
@@ -818,6 +819,7 @@ Project: `backend/tests/PhoneBook.Api.UnitTests`. No Docker, no network, no data
 | Entity creation | `PhoneNumber.Create` trims the name, normalizes the number, generates a UUIDv7 and takes `createdAt` from `FakeTimeProvider` |
 | Mapping | The projection sets `isOwnedByCurrentUser` to true for the owner and false for anyone else; the response type has no owner id property |
 | Current user | `CurrentUser` reads `sub` and `preferred_username`, falls back to `sub` for the username, and throws when `sub` is missing |
+| Keycloak options and JwtBearer setup | `KeycloakOptions` rejects missing and relative URLs and defaults `RequireHttpsMetadata` to true; `ConfigureJwtBearerOptions` maps metadata address, issuer, audience and `RS256`, sets `MapInboundClaims = false`, and its `OnTokenValidated` handler fails tokens without `sub` |
 | Scope parsing | Accepts `all`, `personal` and `shared` case-insensitively; rejects unknown and numeric values |
 
 Deliberately not covered at this level: controllers and HTTP status codes, EF Core SQL translation, JwtBearer behavior. These belong to integration tests. Framework internals are not tested at all.
@@ -830,7 +832,6 @@ Project: `backend/tests/PhoneBook.Api.IntegrationTests`. Requires a running Dock
 
 - **Database.** `Testcontainers.PostgreSql` starts `postgres:18.6-alpine3.24`, the same tag as Compose, defined once as a constant. There is one container per test collection, shared through a collection fixture. Before each test, `TRUNCATE phone_numbers` resets the data, and tests inside a collection run sequentially, so assertions can expect exact results.
 - **Migrations.** The factory points the connection string at the container. The real startup migration path creates the schema, so every test run also validates the migrations.
-- **Caller identity before JwtBearer exists.** Until the authentication step, `ApiFactory` replaces `ICurrentUser` with `HeaderCurrentUser`, which reads the same `X-Test-Sub` and `X-Test-Username` headers, and replaces `TimeProvider` with a `FakeTimeProvider`.
 - **Test authentication scheme.** `ApiFactory` replaces JwtBearer with a header-driven `TestAuthHandler`. The headers `X-Test-Sub` and `X-Test-Username` define the caller. A request without them gets `AuthenticateResult.NoResult()`, which produces a 401.
 - **Real token validation.** `JwtApiFactory` keeps the real JwtBearer configuration but replaces the OIDC configuration with an in-memory `OpenIdConnectConfiguration` holding a test RSA key, so no metadata is fetched. Tests sign tokens with `JsonWebTokenHandler`. This checks the actual issuer, audience, lifetime and `sub` rules without Keycloak.
 
@@ -847,7 +848,9 @@ Project: `backend/tests/PhoneBook.Api.IntegrationTests`. Requires a running Dock
 | Body containing `ownerId` and `ownerUsername` of another user | Ignored; the stored owner is the authenticated caller |
 | POST success | 201, a `Location` header that resolves through GET, and a normalized `number` |
 | Append-only guard | Modifying or removing a tracked `PhoneNumber` through `AppDbContext` throws |
-| `JwtApiFactory`: valid token / wrong `iss` / wrong `aud` / expired / no `sub` / ID token | 200 / 401 / 401 / 401 / 401 / 401 |
+| `JwtApiFactory`: valid token / wrong `iss` / wrong `aud` / expired or not yet valid / missing or blank `sub` / ID token / foreign key, HMAC or unsigned / tampered payload or signature / not a JWT | 200 / 401 for every invalid case, with no entry stored |
+| `JwtApiFactory`: alice and bob with real signed tokens | alice sees her personal and every shared entry; bob never sees alice's personal entry; the stored owner is `sub` and the username is `preferred_username`, falling back to `sub` |
+| `JwtApiFactory`: PUT, PATCH and DELETE | 405 with a valid token, 401 without one |
 | OpenAPI document | Anonymous 200; contains no PUT, PATCH or DELETE operations |
 | Health endpoints | Anonymous 200 |
 

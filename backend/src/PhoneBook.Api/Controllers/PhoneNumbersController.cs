@@ -1,9 +1,11 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PhoneBook.Api.Application;
 
 namespace PhoneBook.Api.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/phone-numbers")]
 public sealed class PhoneNumbersController(PhoneNumberService service) : ControllerBase
 {
