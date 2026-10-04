@@ -56,7 +56,7 @@ This starts PostgreSQL, Keycloak, the backend and the frontend in dependency ord
 
 `docker compose up` works the same way.
 
-Compose pulls the published images first and builds them from source only when the pull fails. To build from source explicitly, for example after changing the code:
+When an application image is not present on the machine yet, Compose pulls the published image, and builds it from source only when the pull fails. An image that is already present is reused as it is: Compose neither pulls a newer version nor rebuilds it. After `git pull` or any change to the code, build from source explicitly:
 
 ```bash
 docker-compose up --build
@@ -124,8 +124,10 @@ Both images are built for `linux/amd64` and `linux/arm64`, so they run natively 
 Compose reads the namespace and the tag from environment variables:
 
 ```bash
-PHONEBOOK_TAG=1.0.0 docker-compose up
+PHONEBOOK_TAG=1.1.0 docker-compose up
 ```
+
+To replace local `latest` images with the newest published ones, run `docker compose pull` before `docker compose up`.
 
 PostgreSQL and Keycloak use the official images. Their configuration comes from files in this repository (`db/init` and `keycloak/realm`).
 

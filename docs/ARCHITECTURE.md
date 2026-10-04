@@ -782,7 +782,7 @@ PostgreSQL and Keycloak use the official images. Their configuration comes from 
 
 ### Compose: published images and source builds
 
-Each application service declares both `image: ${IMAGE_NAMESPACE:-ghcr.io/denisshi}/phonebook-<name>:${PHONEBOOK_TAG:-latest}` and `build: ./<name>`. According to the Compose specification, when `pull_policy` is not set, Compose first tries to pull the image and builds from source only when the image is not found. As a result:
+Each application service declares both `image: ${IMAGE_NAMESPACE:-ghcr.io/denisshi}/phonebook-<name>:${PHONEBOOK_TAG:-latest}` and `build: ./<name>`. According to the Compose specification, when `pull_policy` is not set, the policy is `missing`: Compose pulls an image only when it is not present locally, and builds from source only when the pull fails. An image that is already present is reused without checking the registry. As a result:
 
 - `docker-compose up` in a clean clone runs the published images.
 - `docker-compose up --build` builds both images from source.
@@ -790,7 +790,7 @@ Each application service declares both `image: ${IMAGE_NAMESPACE:-ghcr.io/deniss
 
 If the image has not been published yet, the pull fails and Compose builds the image from source instead, tagging it with the same `image:` name. Later runs of `docker-compose up` reuse that local image, so after changing source code use `docker-compose up --build`.
 
-`PHONEBOOK_TAG=1.0.0 docker-compose up` pins a specific release.
+`PHONEBOOK_TAG=1.1.0 docker-compose up` pins a specific release.
 
 ### Tag strategy
 
