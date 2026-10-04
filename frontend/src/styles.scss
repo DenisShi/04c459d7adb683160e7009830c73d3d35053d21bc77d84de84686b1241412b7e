@@ -26,3 +26,40 @@ body {
   margin: 4rem auto;
   padding: 0 1.5rem;
 }
+
+.app-loader {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  animation: app-loader-appear 150ms ease-out 150ms forwards;
+}
+
+.app-loader-spinner {
+  width: 3rem;
+  height: 3rem;
+  box-sizing: border-box;
+  border: 4px solid var(--mat-sys-secondary-container);
+  border-top-color: var(--mat-sys-primary);
+  border-radius: 50%;
+  animation: app-loader-spin 0.9s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-loader-spinner {
+    animation-duration: 2.4s;
+  }
+}
+
+@keyframes app-loader-appear {
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes app-loader-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

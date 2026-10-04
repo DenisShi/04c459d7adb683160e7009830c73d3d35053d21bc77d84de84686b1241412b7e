@@ -6,11 +6,13 @@ export type Scope = 'All' | Visibility;
 
 export class PhoneNumbersPage {
   readonly heading: Locator;
+  readonly loadingIndicator: Locator;
   readonly header: HeaderComponent;
   readonly addForm: AddPhoneNumberForm;
 
   constructor(private readonly page: Page) {
     this.heading = page.getByRole('heading', { name: 'Phone numbers', level: 1 });
+    this.loadingIndicator = page.getByRole('status', { name: 'Loading Phone Book' });
     this.header = new HeaderComponent(page);
     this.addForm = new AddPhoneNumberForm(page);
   }

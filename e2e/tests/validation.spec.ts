@@ -40,6 +40,31 @@ test.describe('add form validation', () => {
     await phoneNumbersPage.expectNoEntry(contactName);
   });
 
+  for (const viewport of [
+    { width: 1280, height: 720 },
+    { width: 375, height: 812 },
+  ]) {
+    test(`phone number error does not overlap the visibility label at ${viewport.width}px`, async ({
+      page,
+    }) => {
+      await page.setViewportSize(viewport);
+      const { addForm } = new PhoneNumbersPage(page);
+
+      await addForm.add({
+        contactName: uniqueContactName('Overlap'),
+        number: '1234',
+        visibility: 'Personal',
+      });
+
+      await expect(addForm.numberInvalidError).toBeVisible();
+      const error = await addForm.numberInvalidError.boundingBox();
+      const label = await addForm.visibilityLabel.boundingBox();
+      expect(error).not.toBeNull();
+      expect(label).not.toBeNull();
+      expect(error!.y + error!.height).toBeLessThanOrEqual(label!.y);
+    });
+  }
+
   for (const number of ['601 234 567', '+420 101 234 567', '+420 601 234 5678']) {
     test(`number ${number} that is not a real international number is rejected`, async ({
       page,

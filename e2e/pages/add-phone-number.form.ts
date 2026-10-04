@@ -16,6 +16,7 @@ export class AddPhoneNumberForm {
   readonly contactNameRequiredError: Locator;
   readonly numberRequiredError: Locator;
   readonly numberInvalidError: Locator;
+  readonly visibilityLabel: Locator;
 
   constructor(page: Page) {
     this.root = page.getByRole('form', { name: 'Add phone number' });
@@ -25,6 +26,7 @@ export class AddPhoneNumberForm {
     this.contactNameRequiredError = this.root.getByText('Contact name is required.');
     this.numberRequiredError = this.root.getByText('Phone number is required.');
     this.numberInvalidError = this.root.getByText('Enter a valid phone number', { exact: false });
+    this.visibilityLabel = this.root.getByText('Visibility', { exact: true });
   }
 
   visibilityOption(visibility: Visibility): Locator {

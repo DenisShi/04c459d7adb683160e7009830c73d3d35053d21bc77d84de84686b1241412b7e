@@ -37,7 +37,7 @@ import {
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <form class="form" aria-label="Add phone number" [formGroup]="form" (ngSubmit)="submit()">
-      <mat-form-field appearance="outline">
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
         <mat-label>Contact name</mat-label>
         <input matInput formControlName="contactName" autocomplete="off" />
         @if (form.controls.contactName.hasError('required')) {
@@ -49,7 +49,7 @@ import {
         }
       </mat-form-field>
 
-      <mat-form-field appearance="outline">
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
         <mat-label>Phone number</mat-label>
         <input matInput formControlName="number" type="tel" autocomplete="off" />
         <mat-hint>For example +420 601 234 567</mat-hint>
@@ -96,7 +96,7 @@ import {
     .form {
       display: flex;
       flex-direction: column;
-      gap: 0.5rem;
+      gap: 1rem;
     }
 
     .visibility {
