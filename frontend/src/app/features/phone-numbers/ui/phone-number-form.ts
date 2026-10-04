@@ -18,6 +18,7 @@ import {
   PHONE_NUMBER_MAX_INPUT_LENGTH,
   contactNameValidator,
   phoneNumberValidator,
+  trimLikeServer,
 } from '../validation/phone-number-validators';
 
 @Component({
@@ -166,6 +167,10 @@ export class PhoneNumberForm {
       return;
     }
     const { contactName, number, visibility } = this.form.getRawValue();
-    this.submitted.emit({ contactName: contactName.trim(), number: number.trim(), visibility });
+    this.submitted.emit({
+      contactName: trimLikeServer(contactName),
+      number: trimLikeServer(number),
+      visibility,
+    });
   }
 }

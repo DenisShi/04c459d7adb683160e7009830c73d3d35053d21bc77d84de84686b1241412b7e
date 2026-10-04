@@ -4,9 +4,12 @@
       { "input": "  Alice Anderson ", "normalized": "Alice Anderson" },
       { "input": "A", "normalized": "A" },
       { "input": "Dr. John-Paul O'Neil", "normalized": "Dr. John-Paul O'Neil" },
-      { "input": "\tBob\t", "normalized": "Bob" }
+      { "input": "\tBob\t", "normalized": "Bob" },
+      { "input": "\u00a0Bob\u2003", "normalized": "Bob" },
+      { "input": "Bob\u0085", "normalized": "Bob" },
+      { "input": "\ufeffBob", "normalized": "\ufeffBob" }
     ],
-    "invalid": ["", "   ", "\t\n"]
+    "invalid": ["", "   ", "\t\n", "\u0085", "\u00a0\u2003", "\u2028"]
   },
   "number": {
     "valid": [
@@ -15,7 +18,9 @@
       { "input": "112", "normalized": "112" },
       { "input": "  601.234.567  ", "normalized": "601234567" },
       { "input": "+123456789012345", "normalized": "+123456789012345" },
-      { "input": "123456789012345", "normalized": "123456789012345" }
+      { "input": "123456789012345", "normalized": "123456789012345" },
+      { "input": "\u00a0+420601234567\u2003", "normalized": "+420601234567" },
+      { "input": "123\u0085", "normalized": "123" }
     ],
     "invalid": [
       "",
@@ -29,7 +34,10 @@
       "+1234567890123456",
       "601 234 567 ext 2",
       "abc",
-      "123\n456"
+      "123\n456",
+      "\ufeff123",
+      "1\u00a02\u00a03",
+      "\u0661\u0662\u0663"
     ]
   }
 }

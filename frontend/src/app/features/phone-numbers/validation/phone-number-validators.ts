@@ -5,15 +5,22 @@ export const PHONE_NUMBER_MAX_INPUT_LENGTH = 32;
 
 const NORMALIZED_PHONE_NUMBER = /^\+?[0-9]{3,15}$/;
 const PHONE_NUMBER_SEPARATORS = /[ \-.()]/g;
+const SERVER_WHITESPACE =
+  '\\t-\\r \\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000';
+const SURROUNDING_WHITESPACE = new RegExp(`^[${SERVER_WHITESPACE}]+|[${SERVER_WHITESPACE}]+$`, 'g');
+
+export function trimLikeServer(input: string): string {
+  return input.replace(SURROUNDING_WHITESPACE, '');
+}
 
 export function normalizePhoneNumber(input: string): string {
-  return input.trim().replace(PHONE_NUMBER_SEPARATORS, '');
+  return trimLikeServer(input).replace(PHONE_NUMBER_SEPARATORS, '');
 }
 
 export const contactNameValidator: ValidatorFn = (
   control: AbstractControl,
 ): ValidationErrors | null => {
-  const value = String(control.value ?? '').trim();
+  const value = trimLikeServer(String(control.value ?? ''));
   if (value.length === 0) {
     return { required: true };
   }
@@ -26,7 +33,7 @@ export const contactNameValidator: ValidatorFn = (
 export const phoneNumberValidator: ValidatorFn = (
   control: AbstractControl,
 ): ValidationErrors | null => {
-  const value = String(control.value ?? '').trim();
+  const value = trimLikeServer(String(control.value ?? ''));
   if (value.length === 0) {
     return { required: true };
   }

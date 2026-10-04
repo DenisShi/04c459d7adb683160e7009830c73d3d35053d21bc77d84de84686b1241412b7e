@@ -76,6 +76,170 @@ public sealed class PhoneNumbersValidationTests(ApiFixture fixture) : ApiTestBas
         Assert.Equal(expected, response.StatusCode);
     }
 
+    [Theory]
+    [InlineData("personal", "PERSONAL")]
+    [InlineData("Shared", "SHARED")]
+    [InlineData(" SHARED", "SHARED")]
+    public async Task Post_VisibilityInDifferentCaseOrWithSurroundingSpaces_IsAcceptedAndReturnedInCanonicalForm(string sent, string expected)
+    {
+        using var alice = Fixture.CreateClient(Alice, "alice");
+        var body = $$"""{"contactName":"Alice","number":"+420601234567","visibility":"{{sent}}"}""";
+
+        var response = await alice.PostAsync(PhoneNumbersUrl, JsonBody(body), Cancellation);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>(Cancellation);
+        Assert.Equal(expected, json.GetProperty("visibility").GetString());
+    }
+
+    [Theory]
+    [InlineData("""{"contactName":"Alice","number":"+420601234567","visibility":""}""")]
+    [InlineData("""{"contactName":"Alice","number":"+420601234567","visibility":"PUBLIC"}""")]
+    [InlineData("""{"contactName":"Alice","number":"+420601234567","visibility":true}""")]
+    [InlineData("""{"contactName":"Alice","number":"+420601234567","visibility":["SHARED"]}""")]
+    [InlineData("""{"contactName":"Alice","number":"+420601234567","visibility":{"value":"SHARED"}}""")]
+    public async Task Post_UnrecognizedVisibility_ReturnsBadRequestAndStoresNothing(string body)
+    {
+        using var alice = Fixture.CreateClient(Alice, "alice");
+
+        var response = await alice.PostAsync(PhoneNumbersUrl, JsonBody(body), Cancellation);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+        Assert.Empty(await ListAsync(alice));
+    }
+
+    [Theory]
+    [InlineData("""{"contactName":123,"number":"+420601234567","visibility":"SHARED"}""")]
+    [InlineData("""{"contactName":null,"number":"+420601234567","visibility":"SHARED"}""")]
+    [InlineData("""{"contactName":"Alice","number":420601234567,"visibility":"SHARED"}""")]
+    [InlineData("""{"contactName":"Alice","number":null,"visibility":"SHARED"}""")]
+    [InlineData("""{"contactName":["Alice"],"number":"+420601234567","visibility":"SHARED"}""")]
+    [InlineData("[]")]
+    [InlineData("null")]
+    [InlineData("{}")]
+    public async Task Post_WrongFieldTypesOrEmptyPayload_ReturnsBadRequestAndStoresNothing(string body)
+    {
+        using var alice = Fixture.CreateClient(Alice, "alice");
+
+        var response = await alice.PostAsync(PhoneNumbersUrl, JsonBody(body), Cancellation);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Empty(await ListAsync(alice));
+    }
+
+    [Theory]
+    [InlineData(1, HttpStatusCode.Created)]
+    [InlineData(100, HttpStatusCode.Created)]
+    [InlineData(101, HttpStatusCode.BadRequest)]
+    [InlineData(10_000, HttpStatusCode.BadRequest)]
+    public async Task Post_ContactNameLengthAfterTrimming_IsEnforcedAtBothEnds(int length, HttpStatusCode expected)
+    {
+        using var alice = Fixture.CreateClient(Alice, "alice");
+        var name = new string('a', length);
+        var body = $$"""{"contactName":"  {{name}}  ","number":"+420601234567","visibility":"SHARED"}""";
+
+        var response = await alice.PostAsync(PhoneNumbersUrl, JsonBody(body), Cancellation);
+
+        Assert.Equal(expected, response.StatusCode);
+        if (expected == HttpStatusCode.Created)
+        {
+            var created = await response.Content.ReadFromJsonAsync<PhoneNumberResponse>(Json, Cancellation);
+            Assert.Equal(name, created!.ContactName);
+        }
+    }
+
+    [Fact]
+    public async Task Post_ContactNameOfOnlyWhitespaceAndLineBreaks_ReturnsBadRequest()
+    {
+        using var alice = Fixture.CreateClient(Alice, "alice");
+        var body = """{"contactName":" \t\n ","number":"+420601234567","visibility":"SHARED"}""";
+
+        var response = await alice.PostAsync(PhoneNumbersUrl, JsonBody(body), Cancellation);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Empty(await ListAsync(alice));
+    }
+
+    [Theory]
+    [InlineData("12", false)]
+    [InlineData("+12", false)]
+    [InlineData("123", true)]
+    [InlineData("+123", true)]
+    [InlineData("+123456789012345", true)]
+    [InlineData("+1234567890123456", false)]
+    [InlineData("+", false)]
+    [InlineData("++123", false)]
+    [InlineData("123+", false)]
+    [InlineData("12 3 ext", false)]
+    [InlineData("\u0661\u0662\u0663\u0664\u0665", false)]
+    public async Task Post_NumberDigitCountAndShape_IsEnforced(string number, bool accepted)
+    {
+        using var alice = Fixture.CreateClient(Alice, "alice");
+        var body = $$"""{"contactName":"Alice","number":"{{number}}","visibility":"SHARED"}""";
+
+        var response = await alice.PostAsync(PhoneNumbersUrl, JsonBody(body), Cancellation);
+
+        Assert.Equal(accepted ? HttpStatusCode.Created : HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(accepted ? 1 : 0, (await ListAsync(alice)).Count);
+    }
+
+    [Theory]
+    [InlineData(32, HttpStatusCode.Created)]
+    [InlineData(33, HttpStatusCode.BadRequest)]
+    [InlineData(5_000, HttpStatusCode.BadRequest)]
+    public async Task Post_NumberRawLength_IsEnforcedBeforeNormalization(int rawLength, HttpStatusCode expected)
+    {
+        using var alice = Fixture.CreateClient(Alice, "alice");
+        var number = "+12" + new string('-', rawLength - 4) + "3";
+        var body = $$"""{"contactName":"Alice","number":"{{number}}","visibility":"SHARED"}""";
+
+        var response = await alice.PostAsync(PhoneNumbersUrl, JsonBody(body), Cancellation);
+
+        Assert.Equal(expected, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Post_NumberWithSeparatorsAndSurroundingWhitespace_IsStoredNormalized()
+    {
+        using var alice = Fixture.CreateClient(Alice, "alice");
+        var body = """{"contactName":"Alice","number":"  (02) 1234-5678.  ","visibility":"PERSONAL"}""";
+
+        var response = await alice.PostAsync(PhoneNumbersUrl, JsonBody(body), Cancellation);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var created = await response.Content.ReadFromJsonAsync<PhoneNumberResponse>(Json, Cancellation);
+        Assert.Equal("0212345678", created!.Number);
+    }
+
+    [Fact]
+    public async Task Post_InvalidBodyWithOwnerFields_ReturnsBadRequestAndStoresNothingForAnyone()
+    {
+        using var alice = Fixture.CreateClient(Alice, "alice");
+        using var bob = Fixture.CreateClient(Bob, "bob");
+        var body = """{"contactName":"","number":"12","visibility":"SHARED","ownerId":"bob-sub","ownerUsername":"bob"}""";
+
+        var response = await alice.PostAsync(PhoneNumbersUrl, JsonBody(body), Cancellation);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Empty(await ListAsync(bob));
+        Assert.Empty(await ListAsync(alice));
+    }
+
+    [Fact]
+    public async Task Post_PersonalEntryNamingAnotherOwner_StaysInvisibleToThatUser()
+    {
+        using var alice = Fixture.CreateClient(Alice, "alice");
+        using var bob = Fixture.CreateClient(Bob, "bob");
+        var body = """{"contactName":"Alice","number":"+420601234567","visibility":"PERSONAL","ownerId":"bob-sub","ownerUsername":"bob"}""";
+
+        var response = await alice.PostAsync(PhoneNumbersUrl, JsonBody(body), Cancellation);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.Empty(await ListAsync(bob));
+        Assert.Single(await ListAsync(alice, "?scope=personal"));
+    }
+
     [Fact]
     public async Task Post_ValidBody_ReturnsCreatedWithNormalizedNumberAndResolvableLocation()
     {

@@ -77,6 +77,35 @@ public sealed class ReadOnlyApiSurfaceTests(ApiFixture fixture) : ApiTestBase(fi
     }
 
     [Fact]
+    public async Task AppDbContext_SynchronousSaveOfModifiedEntry_Throws()
+    {
+        await using var scope = Fixture.Factory.Services.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var entry = PhoneNumber.Create("Alice", "+420601234567", Visibility.Shared, Alice, "alice", Fixture.Clock);
+        dbContext.PhoneNumbers.Add(entry);
+        dbContext.SaveChanges();
+
+        dbContext.Entry(entry).Property(nameof(PhoneNumber.ContactName)).CurrentValue = "Changed";
+
+        Assert.Throws<InvalidOperationException>(() => dbContext.SaveChanges());
+    }
+
+    [Fact]
+    public async Task AppDbContext_SynchronousSaveOfRemovedEntry_Throws()
+    {
+        await using var scope = Fixture.Factory.Services.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var entry = PhoneNumber.Create("Alice", "+420601234567", Visibility.Shared, Alice, "alice", Fixture.Clock);
+        dbContext.PhoneNumbers.Add(entry);
+        dbContext.SaveChanges();
+
+        dbContext.PhoneNumbers.Remove(entry);
+
+        Assert.Throws<InvalidOperationException>(() => dbContext.SaveChanges());
+        Assert.Equal(1, await dbContext.PhoneNumbers.AsNoTracking().CountAsync(Cancellation));
+    }
+
+    [Fact]
     public async Task AppDbContext_AddingEntries_Succeeds()
     {
         await using var scope = Fixture.Factory.Services.CreateAsyncScope();

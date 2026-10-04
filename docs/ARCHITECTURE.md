@@ -607,7 +607,7 @@ Backend and frontend apply identical rules. The backend enforces them authoritat
 |---|---|
 | `contactName` | Required. Leading and trailing whitespace is trimmed. The trimmed value must be 1 to 100 characters. Whitespace-only input is invalid. |
 | `number` | Required. Leading and trailing whitespace is trimmed, and the trimmed input must be at most 32 characters. Normalization removes spaces, `-`, `.`, `(` and `)`. The normalized value must match `^\+?[0-9]{3,15}$`: an optional leading `+`, then 3 to 15 digits (15 is the E.164 maximum). The normalized value is what gets stored and returned. |
-| `visibility` | Required, with no server-side default. Must be `PERSONAL` or `SHARED`. |
+| `visibility` | Required, with no server-side default. Must be `PERSONAL` or `SHARED`; the JSON enum converter matches the name case-insensitively, ignores surrounding spaces and responses always use the upper-case form. |
 
 Examples: `+420 601 234 567` is stored as `+420601234567`. `(02) 1234-5678` is stored as `0212345678`. `112` is valid. These inputs are invalid: `12` (too short), `+` (no digits), `420+601` (`+` not at the start), `++420601234567`, `1234567890123456` (16 digits) and `601 234 567 ext 2` (letters).
 
@@ -856,7 +856,7 @@ Project: `backend/tests/PhoneBook.Api.IntegrationTests`. Requires a running Dock
 | bob requests alice's personal entry by id | 404, the same as for a random id |
 | Request without credentials | 401 with a ProblemDetails body |
 | Authenticated PUT, PATCH and DELETE on the collection and item routes | 405 with an `Allow` header |
-| Invalid bodies: empty name, bad number, missing or unknown `visibility`, numeric `visibility`, malformed JSON | 400 `ValidationProblemDetails` with camelCase `errors` keys |
+| Invalid bodies: empty or whitespace-only name, names of 100 and 101 characters, number length and digit-count boundaries, missing or unknown `visibility`, numeric, boolean, array and object `visibility`, wrong field types, malformed JSON | 400 `ValidationProblemDetails` with camelCase `errors` keys |
 | Unknown `scope` | 400 |
 | Non-JSON content type on POST | 415 |
 | Body containing `ownerId` and `ownerUsername` of another user | Ignored; the stored owner is the authenticated caller |
@@ -899,10 +899,10 @@ Folder: `e2e/` at the repository root. It has its own `package.json`, `playwrigh
 |---|---|
 | `baseURL` | `process.env.E2E_BASE_URL`, default `http://localhost:4200` |
 | Credentials | `E2E_ALICE_USERNAME`, `E2E_ALICE_PASSWORD`, `E2E_BOB_USERNAME`, `E2E_BOB_PASSWORD`, defaults matching the realm users |
-| Projects | `setup` (logs in through Keycloak), `chromium` (depends on `setup`; required); `firefox` is optional for local runs |
+| Projects | `setup` (logs in through Keycloak), `chromium` (depends on `setup`; required); `firefox` is optional and enabled by setting `E2E_FIREFOX=1` |
 | Authentication state | The setup project signs in alice and bob through the real Keycloak login form and saves `storageState` to `e2e/.auth/alice.json` and `e2e/.auth/bob.json` (git-ignored). The Keycloak session cookie in that state lets the SPA's silent check-sso restore the session |
 | Retries | 1 on CI, 0 locally |
-| Artifacts | `trace: 'on-first-retry'`, `screenshot: 'only-on-failure'`, `video: 'retain-on-failure'`, HTML reporter |
+| Artifacts | `trace: 'retain-on-failure'`, `screenshot: 'only-on-failure'`, `video: 'retain-on-failure'`, HTML reporter |
 | Waiting | Web-first assertions and auto-waiting locators only; no fixed sleeps |
 
 - **Page Object Model.** `pages/keycloak-login.page.ts`, `pages/phone-numbers.page.ts` and `pages/add-phone-number.form.ts`. Locators use `getByRole`, `getByLabel` and, as a last resort, `getByTestId`. There are no CSS or XPath selectors tied to layout.
@@ -920,7 +920,7 @@ Folder: `e2e/` at the repository root. It has its own `package.json`, `playwrigh
 
 Deliberately not covered: the full validation matrix and API status codes (unit and integration tests), visual regression and performance.
 
-Naming: one spec file per journey (`auth.spec.ts`, `add-phone-number.spec.ts`, `visibility.spec.ts`, `filter.spec.ts`, `validation.spec.ts`). Test titles are plain sentences, for example `test('bob does not see alice personal number')`.
+Naming: one spec file per journey (`auth.spec.ts`, `add-phone-number.spec.ts`, `visibility.spec.ts`, `filter.spec.ts`, `validation.spec.ts`, `read-only.spec.ts`). Test titles are plain sentences, for example `test('bob does not see alice personal number')`.
 
 ### Commands
 
@@ -929,6 +929,7 @@ Naming: one spec file per journey (`auth.spec.ts`, `add-phone-number.spec.ts`, `
 | Backend unit | `dotnet test --project tests/PhoneBook.Api.UnitTests` in `backend/` |
 | Backend integration (Docker running) | `dotnet test --project tests/PhoneBook.Api.IntegrationTests` in `backend/` |
 | Backend, all | `dotnet test --solution PhoneBook.slnx` in `backend/` |
+| Backend coverage (Docker running) | `dotnet tool restore` in `backend/`, then for each test project build it and run `dotnet coverlet <test dll> --target dotnet --targetargs "exec <test dll>" --include "[PhoneBook.Api]*" --exclude-by-file "**/Migrations/*.cs" -f json -f cobertura -o ../coverage/<name>`; pass `--merge-with ../coverage/<unit>.json` to the second run to get one combined report |
 | Frontend unit, watch | `npm test` in `frontend/` (runs `ng test`) |
 | Frontend unit, CI with coverage | `npm run test:ci` in `frontend/` (runs `ng test --watch=false --coverage`) |
 | Frontend lint | `npm run lint` in `frontend/` |

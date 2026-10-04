@@ -2,6 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 import { alice } from './support/users';
 
 const isCi = !!process.env['CI'];
+const includeFirefox = !!process.env['E2E_FIREFOX'];
 
 export default defineConfig({
   timeout: 30_000,
@@ -13,7 +14,7 @@ export default defineConfig({
   reporter: [['html', { open: 'never' }], ['list']],
   use: {
     baseURL: process.env['E2E_BASE_URL'] ?? 'http://localhost:4200',
-    trace: 'on-first-retry',
+    trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
   },
@@ -30,5 +31,15 @@ export default defineConfig({
       dependencies: ['setup'],
       use: { ...devices['Desktop Chrome'], storageState: alice.storageStatePath },
     },
+    ...(includeFirefox
+      ? [
+          {
+            name: 'firefox',
+            testDir: './tests',
+            dependencies: ['setup'],
+            use: { ...devices['Desktop Firefox'], storageState: alice.storageStatePath },
+          },
+        ]
+      : []),
   ],
 });

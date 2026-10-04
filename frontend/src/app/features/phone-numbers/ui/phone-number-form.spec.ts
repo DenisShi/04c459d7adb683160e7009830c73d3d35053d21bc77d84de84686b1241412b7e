@@ -77,6 +77,65 @@ describe('PhoneNumberForm', () => {
     expect(text()).toContain('The server rejected this number.');
   });
 
+  it('rejects a contact name longer than 100 characters and accepts exactly 100', async () => {
+    await (await numberInput()).setValue('+420601234567');
+    await (await nameInput()).setValue('a'.repeat(101));
+    await submit();
+
+    expect(submitted).toEqual([]);
+    expect(text()).toContain('Contact name must be at most 100 characters.');
+
+    await (await nameInput()).setValue('a'.repeat(100));
+    await submit();
+
+    expect(submitted).toHaveLength(1);
+  });
+
+  it('rejects a phone number longer than 32 characters', async () => {
+    await (await nameInput()).setValue('Alice');
+    await (await numberInput()).setValue(`+${'1'.repeat(32)}`);
+    await submit();
+
+    expect(submitted).toEqual([]);
+    expect(text()).toContain('Phone number must be at most 32 characters.');
+  });
+
+  it('rejects a whitespace-only contact name', async () => {
+    await (await nameInput()).setValue('   ');
+    await (await numberInput()).setValue('+420601234567');
+    await submit();
+
+    expect(submitted).toEqual([]);
+    expect(text()).toContain('Contact name is required.');
+  });
+
+  it('shows server errors for the contact name and the visibility', async () => {
+    fixture.componentRef.setInput('serverErrors', {
+      contactName: 'The server rejected this name.',
+      visibility: 'The server rejected this visibility.',
+    });
+    await fixture.whenStable();
+
+    expect(text()).toContain('The server rejected this name.');
+    expect(text()).toContain('The server rejected this visibility.');
+  });
+
+  it('explains who can see the entry for each visibility', async () => {
+    expect(text()).toContain('Only you can see this entry.');
+
+    await (await loader.getHarness(MatRadioGroupHarness)).checkRadioButton({ label: 'Shared' });
+
+    expect(text()).toContain('Everyone who signs in can see this entry.');
+  });
+
+  it('does not send owner information', async () => {
+    await (await nameInput()).setValue('Alice');
+    await (await numberInput()).setValue('+420601234567');
+    await submit();
+
+    expect(Object.keys(submitted[0]).sort()).toEqual(['contactName', 'number', 'visibility']);
+  });
+
   it('shows a general error when saving failed', async () => {
     fixture.componentRef.setInput('failed', true);
     await fixture.whenStable();

@@ -129,4 +129,27 @@ public class CreatePhoneNumberRequestTests
 
         Assert.DoesNotContain(names, name => name.Contains("Owner", StringComparison.OrdinalIgnoreCase));
     }
+
+    [Theory]
+    [InlineData(123)]
+    [InlineData(true)]
+    public void ContactNameAttribute_NonStringValue_IsInvalid(object value)
+    {
+        Assert.False(new ContactNameAttribute().IsValid(value));
+    }
+
+    [Theory]
+    [InlineData(123)]
+    [InlineData(true)]
+    public void PhoneNumberValueAttribute_NonStringValue_IsInvalid(object value)
+    {
+        Assert.False(new PhoneNumberValueAttribute().IsValid(value));
+    }
+
+    [Fact]
+    public void Attributes_NullValue_AreLeftToTheRequiredAttribute()
+    {
+        Assert.True(new ContactNameAttribute().IsValid(null));
+        Assert.True(new PhoneNumberValueAttribute().IsValid(null));
+    }
 }

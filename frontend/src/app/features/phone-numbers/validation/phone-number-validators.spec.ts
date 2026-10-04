@@ -4,6 +4,7 @@ import {
   contactNameValidator,
   normalizePhoneNumber,
   phoneNumberValidator,
+  trimLikeServer,
 } from './phone-number-validators';
 
 describe('contactNameValidator', () => {
@@ -40,5 +41,15 @@ describe('phoneNumberValidator', () => {
 describe('normalizePhoneNumber', () => {
   it.each(cases.number.valid)('normalizes "$input" to "$normalized"', ({ input, normalized }) => {
     expect(normalizePhoneNumber(input)).toBe(normalized);
+  });
+});
+
+describe('trimLikeServer', () => {
+  it('trims the same characters as the server', () => {
+    expect(trimLikeServer('\u00a0\u2003 a b \u0085\t\n')).toBe('a b');
+  });
+
+  it('keeps the byte order mark that the server does not trim', () => {
+    expect(trimLikeServer('\ufeffa\ufeff')).toBe('\ufeffa\ufeff');
   });
 });

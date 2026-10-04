@@ -73,6 +73,16 @@ describe('PhoneNumbersStore', () => {
     expect(store.phoneNumbers()).toEqual([]);
   });
 
+  it('recovers from a load failure when reloaded', async () => {
+    await flushList('all', {}, serverError);
+
+    store.reload();
+    await flushList('all', [entry]);
+
+    expect(store.loadFailed()).toBe(false);
+    expect(store.phoneNumbers()).toEqual([entry]);
+  });
+
   it('reloads the list after a successful create', async () => {
     await flushList('all', []);
 
@@ -128,5 +138,22 @@ describe('extractFieldErrors', () => {
     expect(extractFieldErrors(unknownKey)).toEqual({});
     expect(extractFieldErrors(wrongStatus)).toEqual({});
     expect(extractFieldErrors(new Error('boom'))).toEqual({});
+  });
+
+  it('returns no field errors for a bad request without an errors object', () => {
+    const withoutErrors = new HttpErrorResponse({ status: 400, error: { title: 'Bad Request' } });
+    const withNullBody = new HttpErrorResponse({ status: 400, error: null });
+
+    expect(extractFieldErrors(withoutErrors)).toEqual({});
+    expect(extractFieldErrors(withNullBody)).toEqual({});
+  });
+
+  it('keeps only the first message of each known field', () => {
+    const response = new HttpErrorResponse({
+      status: 400,
+      error: { errors: { contactName: ['first', 'second'], number: [], visibility: ['bad'] } },
+    });
+
+    expect(extractFieldErrors(response)).toEqual({ contactName: 'first', visibility: 'bad' });
   });
 });
